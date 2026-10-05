@@ -7,7 +7,7 @@ import { nextHeights } from './art/instruments'
 import { rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
-import { statusLine } from './alerts'
+import { QUESTION_TEXT, needsYouText, notifiedText, statusLine } from './alerts'
 import { layoutFor } from './layout'
 import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
@@ -22,6 +22,7 @@ import { studioView } from './views/studio'
 
 const PANE = 'mascot-studio'
 const HOP_MS = 1500
+const ERROR_DIALOG_MS = 8000
 const TICK_MS = 166
 
 const opener = atom({ plugin: 'mascot-studio', key: 'opener' } as const, null as Opener)
@@ -98,6 +99,24 @@ function watchSound($: EngineInterface): void {
     return
   }
   stopSound = soundBackend.watch(soundHost, onStatus)
+}
+
+/** Shows a dialog (or clears it with null) and sets the status line to match. */
+async function setDialog($: EngineInterface, next: Dialog): Promise<void> {
+  await update($, dialog, () => next)
+  await refreshStatus($)
+}
+
+/** Clears the dialog if it is of this kind. */
+async function clearDialog($: EngineInterface, kind: 'error' | 'needs-you'): Promise<void> {
+  if ((await read($, dialog))?.kind === kind) await setDialog($, null)
+}
+
+/** The mascot waves beside an instant message. */
+async function needsYou($: EngineInterface, text: string): Promise<void> {
+  const at = await $.clock.now()
+  await setDialog($, { kind: 'needs-you', text, at })
+  await update($, activity, last => ({ ...last, pose: 'wave', since: at }) as Activity)
 }
 
 /** Takes the engine's usage figures, if they look like figures. */
@@ -198,6 +217,8 @@ export const register: Register = (on, options) => {
       })
       await update($, activity, () => ({ pose, tool, target, since: started }))
       await update($, idleSince, () => null)
+      await clearDialog($, 'error')
+      if (tool === 'AskUserQuestion') await setDialog($, { kind: 'needs-you', text: QUESTION_TEXT, at: started })
     } catch {
       // the studio never stands in the way of a tool call
     }
@@ -212,9 +233,22 @@ export const register: Register = (on, options) => {
           ...(errorLine !== undefined ? { errorLine } : {}),
         }),
       )
+      await clearDialog($, 'needs-you')
       const isTurnRunning = (await read($, turnStartedAt)) !== null
       const isAllDone = (await read($, keyframes)).every(frame => frame.durationMs !== undefined)
-      if (isTurnRunning && isAllDone) await update($, activity, last => ({ ...last, pose: 'thinking', since: ended }) as Activity)
+      if (errorLine !== undefined) {
+        const tool = String(e.tool)
+        await update($, activity, last => ({ ...last, pose: 'facepalm', since: ended }) as Activity)
+        await setDialog($, { kind: 'error', tool, line: errorLine, at: ended })
+        $.clock.after(ERROR_DIALOG_MS, () => {
+          void (async () => {
+            const shown = await read($, dialog)
+            if (shown?.kind === 'error' && shown.at === ended) await setDialog($, null)
+          })()
+        })
+      } else if (isTurnRunning && isAllDone) {
+        await update($, activity, last => ({ ...last, pose: 'thinking', since: ended }) as Activity)
+      }
     } catch {
       // observing only
     }
@@ -239,6 +273,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     try {
       const now = await $.clock.now()
+      await clearDialog($, 'needs-you')
       await update($, activity, () => ({ pose: 'hop', since: now }) as Activity)
       await update($, turns, n => n + 1)
       await update($, turnStartedAt, () => null)
@@ -257,6 +292,36 @@ export const register: Register = (on, options) => {
       // observing only
     }
     return result
+  }).catch(($, e, next) => next(e))
+
+  on('classic.PermissionRequest', async ($, e, next) => {
+    try {
+      const target = targetOf((e.tool_input ?? {}) as Record<string, unknown>)
+      await needsYou($, needsYouText(e.tool_name, target))
+    } catch {
+      // observing only: the person decides, never the studio
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('classic.Notification', async ($, e, next) => {
+    try {
+      if (e.notification_type === 'permission_prompt' && (await read($, dialog))?.kind !== 'needs-you') {
+        await needsYou($, notifiedText(e.message))
+      }
+    } catch {
+      // observing only
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('prompt.submit', async ($, e, next) => {
+    try {
+      await clearDialog($, 'needs-you')
+    } catch {
+      // observing only
+    }
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('session.measure', async ($, e, next) => {
@@ -303,6 +368,7 @@ export const register: Register = (on, options) => {
     const history = await read($, contextHistory)
     const quietSince = await read($, idleSince)
     const turnCount = await read($, turns)
+    const shownDialog = await read($, dialog)
     const soundStatus = await read($, sound)
     const soundKeys = await read($, soundFrames)
     const hasSound = options.sound !== false
@@ -340,6 +406,7 @@ export const register: Register = (on, options) => {
         scene: sc,
         keyframes: frames,
         soundFrames: soundKeys,
+        dialog: shownDialog,
         current,
         selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
         activity: act,
@@ -365,6 +432,7 @@ export const register: Register = (on, options) => {
       {
         selectFrame: n => void update($, selectedFrame, () => n),
         live: () => void update($, selectedFrame, () => null),
+        dismissDialog: () => void setDialog($, null),
         toggleScene: () => void update($, scene, s => (s === 1 ? 2 : 1) as Scene),
         sound: (action: SoundAction) => {
           void (async () => {

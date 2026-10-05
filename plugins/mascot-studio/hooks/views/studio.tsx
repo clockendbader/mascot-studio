@@ -1,9 +1,10 @@
 import type { Elements } from 'claude-code'
 
-import type { Activity, Keyframe, Pose, Scene } from '../../types'
+import type { Activity, Dialog, Keyframe, Pose, Scene } from '../../types'
 import { truncateMiddle } from '../activity'
 import type { RasterFrame } from '../animator'
 import type { Layout } from '../layout'
+import { dialogView } from './dialogs'
 import { mascotAmpView } from './mascotAmp'
 import type { AmpActions, AmpVM } from './mascotAmp'
 import { taskManagerView } from './taskManager'
@@ -27,11 +28,13 @@ export type StudioVM = {
   frames: Readonly<Partial<Record<string, RasterFrame>>>
   tm?: TaskManagerVM
   amp?: AmpVM
+  dialog: Dialog
 }
 
 export type StudioActions = TimelineActions &
   AmpActions & {
     live(): void
+    dismissDialog(): void
   }
 
 const MENU = ' File  Edit  View  Insert  Modify  Control'
@@ -130,11 +133,13 @@ export function studioView(els: Els, vm: StudioVM, act: StudioActions) {
         <Box key="stage-section" flexDirection="column">
           {separator(els, 'Stage', cols)}
           {rasterOf(els, vm.frames.stage)}
+          {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
         </Box>
       ) : (
         <Box key="stage-section" flexDirection="column">
           {separator(els, 'Stage · Scene 2: Task Manager', cols)}
           {vm.tm === undefined ? null : taskManagerView(els, vm.tm, vm.frames)}
+          {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
         </Box>
       )}
       <Box key="properties-section" flexDirection="column">
