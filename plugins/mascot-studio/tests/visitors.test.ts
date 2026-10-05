@@ -6,7 +6,7 @@ import { answerEngine, mountPane, startSession } from './harness'
 
 async function footer($: Engine): Promise<string> {
   const ui = await mountPane($, 60, 32)
-  const text = (await ui.find({ type: 'Text', text: /frame/ }))?.text ?? ''
+  const text = (await ui.find({ type: 'Text', text: /visitor #/ }))?.text ?? ''
   await ui.unmount()
   return text
 }

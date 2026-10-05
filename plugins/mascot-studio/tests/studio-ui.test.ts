@@ -22,20 +22,23 @@ for (const [cols, rows] of SIZES) {
       answerEngine(on)
       await threeCalls($)
       const ui = await mountPane($, cols, rows)
-      expect(await ui.findAll({ type: 'Button', text: '●' })).toHaveLength(3)
+      const strip = (await ui.find({ key: 'filmstrip' }))?.props as { props: { clips: unknown[] } }
+      expect(strip.props.clips).toHaveLength(3)
       expect((await ui.find({ key: 'stage' }))?.props).toMatchObject({ columns: cols - 2, rows: 12 })
     })
 
-    test('the inspector pins a keyframe and live returns', async ($, on) => {
+    test('clicking a clip pins it and live returns', async ($, on) => {
       answerEngine(on)
       await threeCalls($)
       const ui = await mountPane($, cols, rows)
-      await ui.press({ key: 'kf-2' })
-      expect(await ui.find({ type: 'Text', text: /Edit.*✓ \d+ ms/ })).toBeDefined()
+      await ui.pointer({ type: 'down', x: 3, y: 0, button: 'left', in: 'filmstrip' })
+      expect(await ui.find({ type: 'Text', text: /Step 2 · Edit/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /✓ \d+ ms/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /studio\.tsx/ })).toBeDefined()
-      await ui.press({ key: 'live' })
+      await $.command.run({ command: 'studio', args: 'live' } as never)
+      await ui.redraw()
       expect(await ui.find({ type: 'Text', text: /Bash/ })).toBeDefined()
-      expect(await ui.find({ key: 'live' })).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: /Step \d/ })).toBeUndefined()
     })
 
   })

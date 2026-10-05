@@ -5,7 +5,6 @@ import type { ProcResult } from './harness'
 import { channel } from './fakes'
 
 const SONG_1 = 'Playing\tspotify\tDaft Punk\tOne More Time\n'
-const SONG_2 = 'Playing\tspotify\tDaft Punk\tAerodynamic\n'
 
 function linuxRun(controlExit = 0) {
   return (argv: string[]): ProcResult => {
@@ -47,21 +46,6 @@ test('a playing track shows in MascotAmp with its controls', async ($, on) => {
   for (const key of ['lcd', 'viz', 'dj', 'prev', 'play', 'next']) expect(await ui.find({ key })).toBeDefined()
 })
 
-test('a new track adds a Sound-layer keyframe at the current frame', async ($, on) => {
-  const feed = player()
-  const { clock } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: feed.spawn })
-  await playing($, clock, feed)
-  await $.tool.call({ tool: 'Read', tool_use_id: 'u1', file_path: '/a' } as never)
-  await $.tool.call({ tool: 'Read', tool_use_id: 'u2', file_path: '/b' } as never)
-  await $.command.run({ command: 'studio', args: 'timeline' } as never)
-  const before = await mountPane($, 46, 32)
-  expect(await before.findAll({ type: 'Text', text: '●' })).toHaveLength(0)
-  await before.unmount()
-  feed.lines.push(SONG_2)
-  await settle(clock)
-  const after = await mountPane($, 46, 32)
-  expect(await after.findAll({ type: 'Text', text: '●' })).toHaveLength(1)
-})
 
 test('the controls run playerctl and a failure is toasted', async ($, on) => {
   const feed = player()

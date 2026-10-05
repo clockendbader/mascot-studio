@@ -53,7 +53,6 @@ declare module 'claude-code' {
       contextHistory: number[]
       dialog: Dialog
       sound: SoundStatus
-      soundFrames: number[]
       screensaver: boolean
       visitors: number | null
     }

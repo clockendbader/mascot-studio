@@ -2,8 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Activity, Dialog, Keyframe, Opener, SoundAction, SoundStatus, Tab, ThemeName, UsageSnapshot } from '../types'
-import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
-import { nextHeights } from './art/instruments'
+import { finishKeyframe, firstLine, parseClientMessage, poseForTool, startKeyframe, stepTarget, targetOf } from './activity'
+import type { StepAction } from './activity'
+import { clipColor, filmstripCells, nextHeights } from './art/instruments'
 import { TICK_MS, rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
@@ -23,6 +24,7 @@ import type { Os } from './sound/platform'
 import type { Piece, SoundBackend, SoundHost } from './sound/types'
 import { windowsBackend } from './sound/windows'
 import { studioView } from './views/studio'
+import { timelineControls, timelineTabView } from './views/timelineTab'
 
 const PANE = 'mascot-studio'
 const HOP_MS = 1000
@@ -41,7 +43,6 @@ const usage = atom({ plugin: 'mascot-studio', key: 'usage' } as const, { rateLim
 const contextHistory = atom({ plugin: 'mascot-studio', key: 'contextHistory' } as const, [] as number[])
 const dialog = atom({ plugin: 'mascot-studio', key: 'dialog' } as const, null as Dialog)
 const sound = atom({ plugin: 'mascot-studio', key: 'sound' } as const, { kind: 'nothing' } as SoundStatus)
-const soundFrames = atom({ plugin: 'mascot-studio', key: 'soundFrames' } as const, [] as number[])
 const screensaver = atom({ plugin: 'mascot-studio', key: 'screensaver' } as const, false)
 const visitors = atom({ plugin: 'mascot-studio', key: 'visitors' } as const, null as number | null)
 
@@ -59,6 +60,8 @@ let isAnimating = false
 /** Client rows that faulted on this surface: drawn as plain Text from then on. */
 const faulted = new Set<string>()
 const TAB_NAMES: Readonly<Record<string, Tab>> = { timeline: 'timeline', usage: 'usage', music: 'music' }
+/** Empty film kept to the right of the playhead, in clips. */
+const PLAYHEAD_MARGIN = 8
 
 const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
 const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
@@ -75,7 +78,6 @@ async function refreshStatus($: EngineInterface): Promise<void> {
   $.ui.status(text)
 }
 
-const MAX_SOUND_FRAMES = 200
 /** The sound backend for this OS and the host it runs on; the watch's stop function. */
 let soundBackend: SoundBackend | null = null
 let soundHost: SoundHost | null = null
@@ -87,16 +89,9 @@ let vizHeights: number[] = []
 
 const trackOf = (s: SoundStatus) => (s.kind === 'playing' || s.kind === 'paused' ? s.track : undefined)
 
-/** Records a sound status: unchanged ones cost nothing; a new track adds a Sound-layer keyframe. */
+/** Records a sound status; an unchanged one costs nothing. */
 async function applySound($: EngineInterface, next: SoundStatus): Promise<void> {
-  const previous = await read($, sound)
-  if (JSON.stringify(previous) === JSON.stringify(next)) return
-  const before = trackOf(previous)
-  const after = trackOf(next)
-  if (after !== undefined && (before === undefined || before.title !== after.title || before.artist !== after.artist)) {
-    const n = (await read($, keyframes)).at(-1)?.n ?? 0
-    await update($, soundFrames, list => [...list, n].slice(-MAX_SOUND_FRAMES))
-  }
+  if (JSON.stringify(await read($, sound)) === JSON.stringify(next)) return
   await update($, sound, () => next)
 }
 
@@ -148,6 +143,13 @@ async function wake($: EngineInterface): Promise<void> {
 }
 
 const SCREENSAVER_CHECK_TICKS = 6
+
+/** Pins a step (prev, next, a picked one) or returns to live. */
+async function step($: EngineInterface, action: StepAction): Promise<number | null> {
+  const next = stepTarget(await read($, keyframes), await read($, selectedFrame), action)
+  await update($, selectedFrame, () => next)
+  return next
+}
 
 /** Takes the engine's usage figures, if they look like figures. */
 function isRawUsage(value: unknown): value is RawUsage {
@@ -258,8 +260,12 @@ export const register: Register = (on, options) => {
       await update($, themeOverride, () => chosen.name)
       return { text: `Theme set to ${chosen.label} (this session).` }
     }
+    if (verb === 'prev' || verb === 'next' || verb === 'live') {
+      const pinned = await step($, verb)
+      return { text: pinned === null ? 'Back to live.' : `Showing step ${pinned}.` }
+    }
     if (verb !== '') {
-      return { text: 'Try /studio, /studio timeline | usage | music, or /studio theme <windows7 | macos | ubuntu>.' }
+      return { text: 'Try /studio, /studio timeline | usage | music, /studio prev | next | live, or /studio theme <windows7 | macos | ubuntu>.' }
     }
     if (isOpen) {
       await $.ui.close({ id: PANE })
@@ -395,8 +401,11 @@ export const register: Register = (on, options) => {
 
   on('ui.message', { requestId: PANE }, async ($, e, next) => {
     try {
-      const click = (e.data as { click?: unknown } | null)?.click
-      if (typeof click === 'string') {
+      const message = parseClientMessage(e.data)
+      const click = message !== null && 'click' in message ? message.click : null
+      if (message !== null && 'pick' in message) await step($, { pick: message.pick })
+      if (click === 'prev' || click === 'next' || click === 'live') await step($, click)
+      if (click !== null) {
         if (click.startsWith('tab:') && TAB_NAMES[click.slice(4)] !== undefined) {
           const chosen = TAB_NAMES[click.slice(4)] as Tab
           await update($, tab, () => chosen)
@@ -465,7 +474,6 @@ export const register: Register = (on, options) => {
     const isSaving = (await read($, screensaver)) && screensaverMs > 0
     const visitorCount = await read($, visitors)
     const soundStatus = await read($, sound)
-    const soundKeys = await read($, soundFrames)
     const hasSound = options.sound !== false
     const layout = layoutV2(cols, rows)
     const current = frames.at(-1)?.n ?? 0
@@ -506,7 +514,33 @@ export const register: Register = (on, options) => {
       faulted.has(key) ? segmentsText(els, segments) : <els.Client key={key} module="./client/row.tsx" props={{ segments }} width={cols} height={1} />
     const fiveHour = figures.rateLimits.find(limit => limit.kind === 'five_hour')?.percentUsed
     const song = trackOf(soundStatus)?.title
+    const pinned = selected === null ? null : (frames.find(frame => frame.n === selected) ?? null)
+    const stripWidth = cols - 2
+    const visible = frames.slice(-Math.max(1, Math.floor((stripWidth - 1) / 2) - PLAYHEAD_MARGIN))
+    const clips = visible.map(frame => ({ n: frame.n, color: clipColor(frame) }))
+    const film = theme.film
+    const strip = faulted.has('filmstrip') ? (
+      <els.Raster key="filmstrip" columns={stripWidth} rows={2} cells={filmstripCells(clips, current, stripWidth, film)} />
+    ) : (
+      <els.Client
+        key="filmstrip"
+        module="./client/filmstrip.tsx"
+        props={{ clips, current, selected: pinned?.n ?? null, width: stripWidth, film: film.film, hole: film.hole, gap: film.gap, playhead: film.playhead, mark: theme.hover }}
+        width={stripWidth}
+        height={2}
+      />
+    )
+    const timeline =
+      shownTab === 'timeline' && !layout.tooNarrow
+        ? timelineTabView(
+            els,
+            { cols, theme, current, selected: pinned, activity: act, elapsed: startedAt === null ? '' : formatElapsed(at - startedAt), visitors: visitorCount },
+            strip,
+            row('tl-controls', timelineControls(theme, cols, pinned !== null)),
+          )
+        : null
     const parts = {
+      timeline,
       title: row('title', titleSegments(theme, cols)),
       tabs: row('tabs', tabSegments(theme, cols, shownTab)),
       status: row('status', statusSegments(theme, cols, {
@@ -524,7 +558,6 @@ export const register: Register = (on, options) => {
         theme,
         tab: shownTab,
         keyframes: frames,
-        soundFrames: soundKeys,
         dialog: shownDialog,
         screensaver: isSaving,
         current,
@@ -550,8 +583,6 @@ export const register: Register = (on, options) => {
           : {}),
       },
       {
-        selectFrame: n => void update($, selectedFrame, () => n),
-        live: () => void update($, selectedFrame, () => null),
         dismissDialog: () => void setDialog($, null),
         sound: (action: SoundAction) => {
           void (async () => {

@@ -3,7 +3,9 @@ import {
   finishKeyframe,
   firstLine,
   layerCells,
+  parseClientMessage,
   poseForTool,
+  stepTarget,
   startKeyframe,
   targetOf,
   timelineWindow,
@@ -121,4 +123,38 @@ describe('timeline', () => {
   test('marks only listed frames of the Sound layer', () => {
     expect(layerCells(new Set([1]), { start: 1, end: 4 }, 3)).toEqual(['key', 'span', 'playhead', 'future'])
   })
+})
+
+describe('parseClientMessage', () => {
+  test('reads clicks and whole-number picks', () => {
+    expect(parseClientMessage({ click: 'prev' })).toEqual({ click: 'prev' })
+    expect(parseClientMessage({ pick: 3 })).toEqual({ pick: 3 })
+  })
+
+  test('ignores anything else', () => {
+    for (const data of [{ pick: 'x' }, { pick: 1.5 }, { pick: -1 }, {}, null, 'click', { click: 7 }]) expect(parseClientMessage(data)).toBeNull()
+  })
+})
+
+describe('stepTarget', () => {
+  const list = [1, 2, 3].map(n => ({ id: `k${n}`, n, tool: 'Read', target: '', pose: 'reading' as const, startedAt: 0 }))
+
+  test('prev from live pins the newest step, then walks back', () => {
+    expect(stepTarget(list, null, 'prev')).toBe(3)
+    expect(stepTarget(list, 3, 'prev')).toBe(2)
+    expect(stepTarget(list, 1, 'prev')).toBe(1)
+  })
+
+  test('next walks forward and past the newest returns to live', () => {
+    expect(stepTarget(list, 2, 'next')).toBe(3)
+    expect(stepTarget(list, 3, 'next')).toBeNull()
+    expect(stepTarget(list, null, 'next')).toBeNull()
+  })
+
+  test('a pick must name a kept step', () => {
+    expect(stepTarget(list, null, { pick: 2 })).toBe(2)
+    expect(stepTarget(list, 1, { pick: 999 })).toBe(1)
+  })
+
+  test('live unpins', () => expect(stepTarget(list, 2, 'live')).toBeNull())
 })

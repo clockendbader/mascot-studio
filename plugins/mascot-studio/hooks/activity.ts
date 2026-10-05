@@ -93,3 +93,31 @@ export function layerCells(
   }
   return cells
 }
+
+export type ClientMessage = { click: string } | { pick: number }
+
+/** What a Client posted, if it is something the studio acts on: a click id, or a whole, non-negative step number. */
+export function parseClientMessage(data: unknown): ClientMessage | null {
+  if (typeof data !== 'object' || data === null) return null
+  const d = data as { click?: unknown; pick?: unknown }
+  if (typeof d.click === 'string') return { click: d.click }
+  if (typeof d.pick === 'number' && Number.isInteger(d.pick) && d.pick >= 0) return { pick: d.pick }
+  return null
+}
+
+export type StepAction = 'prev' | 'next' | 'live' | { pick: number }
+
+/** The step to pin after an action, or null for live; a pick that names no kept step leaves the pin as it was. */
+export function stepTarget(list: readonly Keyframe[], pinned: number | null, action: StepAction): number | null {
+  if (action === 'live') return null
+  if (action === 'prev') {
+    const at = pinned === null ? list.length : list.findIndex(frame => frame.n === pinned)
+    return list[Math.max(0, at - 1)]?.n ?? pinned
+  }
+  if (action === 'next') {
+    if (pinned === null) return null
+    const at = list.findIndex(frame => frame.n === pinned)
+    return at >= 0 && at < list.length - 1 ? (list[at + 1]?.n ?? null) : null
+  }
+  return list.some(frame => frame.n === action.pick) ? action.pick : pinned
+}

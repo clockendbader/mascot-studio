@@ -1,7 +1,7 @@
 // Period instruments drawn as Rasters: the Task Manager's LED meter, its
 // scrolling history graph (with the mini mascot), and the title bar.
 
-import type { MiniMood } from '../../types'
+import type { Keyframe, MiniMood } from '../../types'
 import { level } from '../usage'
 import type { Level } from '../usage'
 import { drawMiniClawd } from './clawd'
@@ -132,4 +132,44 @@ function paletteGrid(rows: readonly string[], palette: Readonly<Record<string, n
 export function djCells(mode: 'dance' | 'sway' | 'doze', tick: number): string {
   const frames = DJ[mode]
   return gridToCells(paletteGrid(frames[tick % frames.length] ?? frames[0] ?? [], DJ_PALETTE))
+}
+
+// ── Timeline film strip ──────────────────────────────────────────────────
+
+const CLIP_COLORS: Readonly<Record<string, string>> = {
+  reading: '#4A90E2',
+  coding: '#D97757',
+  terminal: '#4B5563',
+  browsing: '#2EAD6B',
+  helper: '#8E5CD9',
+}
+export const CLIP_FAILED = '#E5484D'
+
+/** A step's clip colour: what kind of work it was, or red when it failed. */
+export function clipColor(frame: Keyframe): string {
+  if (frame.isError === true) return CLIP_FAILED
+  return CLIP_COLORS[frame.pose] ?? CLIP_COLORS.coding ?? '#D97757'
+}
+
+const rgb = (hexColor: string) => parseInt(hexColor.slice(1), 16)
+
+/** The film strip as a plain two-row Raster: what the Timeline draws when its Client is not available. */
+export function filmstripCells(
+  clips: readonly { n: number; color: string }[],
+  current: number,
+  width: number,
+  colors: { film: string; hole: string; gap: string; playhead: string },
+): string {
+  const words = new Uint32Array(width * 2 * 3)
+  for (let x = 0; x < width; x++) {
+    const i = x < 1 ? -1 : Math.floor((x - 1) / 2)
+    const clip = i >= 0 ? clips[i] : undefined
+    const onClip = clip !== undefined && (x - 1) % 2 === 0
+    const isPlayhead = clip !== undefined && clip.n === current && !onClip
+    const film = rgb(isPlayhead ? colors.playhead : x % 3 === 1 ? colors.hole : colors.film)
+    const middle = rgb(isPlayhead ? colors.playhead : onClip ? clip.color : colors.gap)
+    words.set([0x2580, film, middle], x * 3)
+    words.set([0x2580, middle, film], (width + x) * 3)
+  }
+  return wordsToCells(words)
 }

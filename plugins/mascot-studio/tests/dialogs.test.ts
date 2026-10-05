@@ -10,7 +10,7 @@ async function view($: Engine) {
   const ui = await mountPane($, 46, 32)
   return {
     ui,
-    pose: (await ui.find({ type: 'Text', text: /Pose/ }))?.text ?? '',
+    pose: (await ui.find({ type: 'Text', text: /Clawd is/ }))?.text ?? '',
     dialog: await ui.find({ key: 'dialog' }),
   }
 }
@@ -34,7 +34,7 @@ describe('error dialog', () => {
     await failed($, clock)
     fail = false
     const v = await view($)
-    expect(v.pose).toMatch(/Pose\s+oops/)
+    expect(v.pose).toMatch(/Clawd is oops/)
     expect(v.dialog).toBeDefined()
     expect(await v.ui.find({ type: 'Text', text: 'Mascot Programming' })).toBeDefined()
     expect(await v.ui.find({ type: 'Text', text: /✖.*Read failed: ENOENT: no such file/ })).toBeDefined()
@@ -72,7 +72,7 @@ describe('needs you', () => {
     await startTurn($)
     expect(await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'npm test' } } as never)).toEqual({})
     const v = await view($)
-    expect(v.pose).toMatch(/Pose\s+waving/)
+    expect(v.pose).toMatch(/Clawd is waving/)
     expect(await v.ui.find({ type: 'Text', text: 'MascotProgramming: hey! i need ur OK to run Bash: npm test' })).toBeDefined()
     expect(rec.statuses.at(-1)).toBe(WAITING)
   })
@@ -112,7 +112,7 @@ describe('needs you', () => {
     await startSession($)
     await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
     const v = await view($)
-    expect(v.pose).toMatch(/Pose\s+waving/)
+    expect(v.pose).toMatch(/Clawd is waving/)
     expect(await v.ui.find({ type: 'Text', text: /MascotProgramming: hey! i need ur OK/ })).toBeDefined()
     expect(rec.statuses.at(-1)).toBe(WAITING)
   })
