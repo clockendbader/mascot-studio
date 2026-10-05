@@ -23,6 +23,14 @@ export type UsageSnapshot = {
   costUsd?: number
   toolCalls: number
 }
+export type Track = { app: string; title: string; artist: string }
+export type SoundStatus =
+  | { kind: 'off' }
+  | { kind: 'nothing' }
+  | { kind: 'playing' | 'paused'; track: Track }
+  | { kind: 'unavailable'; reason: 'missing-playerctl' | 'automation-denied' | 'unsupported-os' }
+  | { kind: 'stopped' }
+export type SoundAction = 'play-pause' | 'next' | 'previous'
 export type Dialog =
   | { kind: 'error'; tool: string; line: string; at: number }
   | { kind: 'needs-you'; text: string; at: number }
