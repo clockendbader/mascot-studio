@@ -14,11 +14,19 @@ export type Keyframe = {
 }
 export type MiniMood = 'relaxed' | 'squint' | 'sweat' | 'flat' | 'asleep'
 export type Activity = { pose: Pose; tool?: string; target?: string; since: number }
+export type Scene = 1 | 2
 
 declare module 'claude-code' {
   interface PluginState {
     'mascot-studio': {
       opener: Opener
+      activity: Activity
+      keyframes: Keyframe[]
+      selectedFrame: number | null
+      scene: Scene
+      turnStartedAt: number | null
+      idleSince: number | null
+      turns: number
     }
   }
 }

@@ -27,6 +27,8 @@ export type BootOptions = {
   now?: number
   surfaces?: string[]
   blitDeny?: (key: string) => string | undefined
+  /** Answers a tool call in place of the default `{ result: 'ok', text: 'ok' }`. */
+  tool?: (e: { tool: string; tool_use_id?: string }) => unknown
 }
 
 /** 2026-10-05 12:00 local time. */
@@ -105,7 +107,7 @@ export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; c
   })
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
-  on('tool.call', async () => ({ result: 'ok', text: 'ok' }) as never)
+  on('tool.call', async (_$, e) => (opts.tool ? await opts.tool(e as never) : { result: 'ok', text: 'ok' }) as never)
 
   return { rec, clock }
 }
@@ -133,4 +135,20 @@ export async function mountPane($: Engine, cols = 46, rows = 30, placement: 'doc
     props: paneProps(cols, rows, placement) as never,
     viewport: { columns: cols, rows, isFullscreen: placement === 'dock' } as never,
   })
+}
+
+export async function startTurn($: Engine, turnId = 't1'): Promise<void> {
+  await $.turn.start({ text: 'go', turnId } as never)
+}
+
+export async function completeTurn($: Engine, turnId = 't1', agentId?: string): Promise<void> {
+  await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId, reason: 'answer', ...(agentId ? { agentId } : {}) } as never)
+}
+
+/** Lets pending hook work run until `done()` holds (or gives up after many turns of the event loop). */
+export async function waitFor(clock: MockClock, done: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !done(); i++) {
+    await clock.settle()
+    await Promise.resolve()
+  }
 }
