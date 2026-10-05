@@ -12,6 +12,7 @@ export type Keyframe = {
   isError?: boolean
   errorLine?: string
 }
+export type MiniMood = 'relaxed' | 'squint' | 'sweat' | 'flat' | 'asleep'
 export type Activity = { pose: Pose; tool?: string; target?: string; since: number }
 
 declare module 'claude-code' {
