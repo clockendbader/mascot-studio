@@ -1,7 +1,7 @@
 {
   "name": "mascot-studio",
-  "version": "0.1.0",
-  "description": "A 2000s animation studio in your terminal: a pixel cat acts out what Claude is doing.",
+  "version": "0.2.0",
+  "description": "A 2010s animation studio in your terminal: Clawd acts out what Claude is doing, with usage and music tabs and Windows 7, Mac OS X and Ubuntu themes.",
   "author": {
     "name": "clockendbader"
   },
@@ -16,8 +16,8 @@
     },
     "sound": {
       "type": "boolean",
-      "title": "Sound panel",
-      "description": "Show what's playing and control it; off runs no helper and reads no media",
+      "title": "Music tab",
+      "description": "Show what's playing and control it from the Music tab; off runs no helper and reads no media",
       "default": true
     },
     "screensaverMinutes": {
@@ -38,5 +38,7 @@
       ],
       "default": "auto"
     }
-  }
+  },
+  "homepage": "https://github.com/clockendbader/mascot-studio",
+  "repository": "https://github.com/clockendbader/mascot-studio"
 }

@@ -1,11 +1,17 @@
 {
   "name": "mascot-studio",
-  "owner": { "name": "clockendbader" },
+  "owner": {
+    "name": "clockendbader"
+  },
+  "metadata": {
+    "description": "Clawd Studio, an unofficial fan-made Claude Code plugin: a 2010s animation studio in your terminal."
+  },
   "plugins": [
     {
       "name": "mascot-studio",
       "source": "./plugins/mascot-studio",
-      "description": "A 2000s animation studio in your terminal: a pixel cat acts out what Claude is doing."
+      "description": "A 2010s animation studio in your terminal: Clawd acts out what Claude is doing, with usage and music tabs and Windows 7, Mac OS X and Ubuntu themes.",
+      "version": "0.2.0"
     }
   ]
 }
