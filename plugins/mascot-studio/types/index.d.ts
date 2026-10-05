@@ -50,6 +50,8 @@ declare module 'claude-code' {
       usage: UsageSnapshot
       contextHistory: number[]
       dialog: Dialog
+      sound: SoundStatus
+      soundFrames: number[]
     }
   }
 }

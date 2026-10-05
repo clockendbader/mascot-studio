@@ -16,7 +16,7 @@ const HEIGHT = {
   stage: { 1: 13, 2: 16 },
   tmBoxes: 5,
   props: { full: 3, line: 2 },
-  amp: { full: 4, line: 1, none: 0 },
+  amp: { full: 6, line: 1, none: 0 },
 } as const
 
 function heightOf(l: Layout, scene: Scene): number {

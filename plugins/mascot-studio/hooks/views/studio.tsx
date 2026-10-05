@@ -4,6 +4,8 @@ import type { Activity, Keyframe, Pose, Scene } from '../../types'
 import { truncateMiddle } from '../activity'
 import type { RasterFrame } from '../animator'
 import type { Layout } from '../layout'
+import { mascotAmpView } from './mascotAmp'
+import type { AmpActions, AmpVM } from './mascotAmp'
 import { taskManagerView } from './taskManager'
 import type { TaskManagerVM } from './taskManager'
 import { timelineView } from './timeline'
@@ -24,11 +26,13 @@ export type StudioVM = {
   visitors: number | null
   frames: Readonly<Partial<Record<string, RasterFrame>>>
   tm?: TaskManagerVM
+  amp?: AmpVM
 }
 
-export type StudioActions = TimelineActions & {
-  live(): void
-}
+export type StudioActions = TimelineActions &
+  AmpActions & {
+    live(): void
+  }
 
 const MENU = ' File  Edit  View  Insert  Modify  Control'
 
@@ -137,6 +141,12 @@ export function studioView(els: Els, vm: StudioVM, act: StudioActions) {
         {separator(els, 'Properties', cols)}
         {propertiesView(els, vm, act)}
       </Box>
+      {vm.amp === undefined || layout.amp === 'none' ? null : (
+        <Box key="amp-section" flexDirection="column">
+          {layout.amp === 'full' ? separator(els, 'MascotAmp', cols) : null}
+          {mascotAmpView(els, vm.amp, vm.frames, act)}
+        </Box>
+      )}
     </Box>
   )
 }

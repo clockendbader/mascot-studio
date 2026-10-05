@@ -2,7 +2,11 @@ import { test, expect } from 'claude-code/testing'
 import { layoutFor } from '../hooks/layout'
 
 test('a tall pane shows every section in full', () => {
-  expect(layoutFor(46, 30, 1, true)).toEqual({ tooNarrow: false, menu: true, props: 'full', amp: 'full', tmBoxes: true })
+  expect(layoutFor(46, 28, 1, true)).toEqual({ tooNarrow: false, menu: true, props: 'full', amp: 'full', tmBoxes: true })
+})
+
+test('the sound panel needs six rows for the DJ blob', () => {
+  expect(layoutFor(46, 27, 1, true).amp).toBe('line')
 })
 
 test('the sound panel folds to one line first', () => {
@@ -19,7 +23,7 @@ test('then Properties folds to one line', () => {
 
 test('Scene 2 folds its Limits and Totals boxes last', () => {
   expect(layoutFor(46, 22, 2, true)).toMatchObject({ tmBoxes: false })
-  expect(layoutFor(46, 29, 2, true)).toMatchObject({ tmBoxes: true, amp: 'full', menu: true })
+  expect(layoutFor(46, 31, 2, true)).toMatchObject({ tmBoxes: true, amp: 'full', menu: true })
 })
 
 test('a pane under 32 columns is too narrow', () => {

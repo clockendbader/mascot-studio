@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, Dialog, Keyframe, Opener, Scene, UsageSnapshot } from '../types'
+import type { Activity, Dialog, Keyframe, Opener, Scene, SoundAction, SoundStatus, UsageSnapshot } from '../types'
 import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
+import { nextHeights } from './art/instruments'
 import { rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
@@ -11,6 +12,12 @@ import { layoutFor } from './layout'
 import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
 import { taskManagerSizes } from './views/taskManager'
+import { marqueeOf } from './views/mascotAmp'
+import { linuxBackend } from './sound/linux'
+import { macosBackend } from './sound/macos'
+import { detectOs } from './sound/platform'
+import type { Piece, SoundBackend, SoundHost } from './sound/types'
+import { windowsBackend } from './sound/windows'
 import { studioView } from './views/studio'
 
 const PANE = 'mascot-studio'
@@ -28,6 +35,8 @@ const turns = atom({ plugin: 'mascot-studio', key: 'turns' } as const, 0)
 const usage = atom({ plugin: 'mascot-studio', key: 'usage' } as const, { rateLimits: [], toolCalls: 0 } as UsageSnapshot)
 const contextHistory = atom({ plugin: 'mascot-studio', key: 'contextHistory' } as const, [] as number[])
 const dialog = atom({ plugin: 'mascot-studio', key: 'dialog' } as const, null as Dialog)
+const sound = atom({ plugin: 'mascot-studio', key: 'sound' } as const, { kind: 'nothing' } as SoundStatus)
+const soundFrames = atom({ plugin: 'mascot-studio', key: 'soundFrames' } as const, [] as number[])
 
 /** The cwd's last path segment, for the pane title. */
 let folder = 'untitled'
@@ -52,6 +61,43 @@ async function refreshStatus($: EngineInterface): Promise<void> {
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
+}
+
+const MAX_SOUND_FRAMES = 200
+/** The sound backend for this OS and the host it runs on; the watch's stop function. */
+let soundBackend: SoundBackend | null = null
+let soundHost: SoundHost | null = null
+let stopSound: (() => void) | null = null
+/** The decorative spectrum's bars, walked each tick. */
+let vizHeights: number[] = []
+
+const trackOf = (s: SoundStatus) => (s.kind === 'playing' || s.kind === 'paused' ? s.track : undefined)
+
+/** Records a sound status: unchanged ones cost nothing; a new track adds a Sound-layer keyframe. */
+async function applySound($: EngineInterface, next: SoundStatus): Promise<void> {
+  const previous = await read($, sound)
+  if (JSON.stringify(previous) === JSON.stringify(next)) return
+  const before = trackOf(previous)
+  const after = trackOf(next)
+  if (after !== undefined && (before === undefined || before.title !== after.title || before.artist !== after.artist)) {
+    const n = (await read($, keyframes)).at(-1)?.n ?? 0
+    await update($, soundFrames, list => [...list, n].slice(-MAX_SOUND_FRAMES))
+  }
+  await update($, sound, () => next)
+}
+
+/** (Re)starts watching the system's now-playing with this OS's backend. */
+function watchSound($: EngineInterface): void {
+  stopSound?.()
+  stopSound = null
+  const onStatus = (s: SoundStatus) => {
+    void applySound($, s).catch(() => undefined)
+  }
+  if (soundBackend === null || soundHost === null) {
+    onStatus({ kind: 'unavailable', reason: 'unsupported-os' })
+    return
+  }
+  stopSound = soundBackend.watch(soundHost, onStatus)
 }
 
 /** Takes the engine's usage figures, if they look like figures. */
@@ -82,6 +128,10 @@ export const register: Register = (on, options) => {
       now = await $.clock.now()
       const last = drawn
       if (last === null || last.mounted.size === 0) return
+      if (last.model.amp !== undefined) {
+        vizHeights = nextHeights(vizHeights, last.model.amp.mode === 'dance', Math.random)
+        last.model.amp.heights = vizHeights
+      }
       for (const frame of rasterFrames(last.model, tick, now)) {
         if (!last.mounted.has(frame.key)) continue
         const painted = await $.ui.blit({ requestId: PANE, key: frame.key, cells: frame.cells })
@@ -100,6 +150,19 @@ export const register: Register = (on, options) => {
       }
     } catch {
       // no figures yet; session.measure brings them
+    }
+    if (options.sound !== false) {
+      now = await $.clock.now()
+      soundHost = {
+        run: (argv, timeoutMs) => $.process.run([...argv], timeoutMs === undefined ? undefined : { timeoutMs }),
+        spawn: argv => $.process.spawn({ argv: [...argv] }) as unknown as AsyncIterable<Piece>,
+        every: (ms, fn) => $.clock.every(ms, fn),
+        after: (ms, fn) => $.clock.after(ms, fn),
+        now: () => now,
+      }
+      const os = await detectOs(await $.env.get('OS'), async () => (await $.process.run(['uname', '-s'])).stdout)
+      soundBackend = os === 'windows' ? windowsBackend : os === 'macos' ? macosBackend : os === 'linux' ? linuxBackend : null
+      watchSound($)
     }
     const hasTerminal = (await $.session.surfaces()).includes('terminal')
     if (options.openOnStartup !== false && hasTerminal) {
@@ -240,11 +303,22 @@ export const register: Register = (on, options) => {
     const history = await read($, contextHistory)
     const quietSince = await read($, idleSince)
     const turnCount = await read($, turns)
-    const layout = layoutFor(cols, rows, sc, false)
+    const soundStatus = await read($, sound)
+    const soundKeys = await read($, soundFrames)
+    const hasSound = options.sound !== false
+    const layout = layoutFor(cols, rows, sc, hasSound)
     const current = frames.at(-1)?.n ?? 0
 
     const model: AnimModel = {}
     if (!layout.tooNarrow && sc === 1) model.stage = { cols, pose: act.pose, hat: hatFor(new Date(at)), screensaver: null }
+    if (!layout.tooNarrow && layout.amp === 'full') {
+      model.amp = {
+        lcdCols: cols - 14,
+        marquee: marqueeOf(soundStatus),
+        mode: soundStatus.kind === 'playing' ? 'dance' : soundStatus.kind === 'paused' ? 'sway' : 'doze',
+        heights: vizHeights,
+      }
+    }
     if (!layout.tooNarrow && sc === 2) {
       model.tm = {
         ...taskManagerSizes(cols),
@@ -265,13 +339,14 @@ export const register: Register = (on, options) => {
         layout,
         scene: sc,
         keyframes: frames,
-        soundFrames: [],
+        soundFrames: soundKeys,
         current,
         selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
         activity: act,
         elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
         visitors: null,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
+        ...(hasSound ? { amp: { cols, mode: layout.amp === 'line' ? ('line' as const) : ('full' as const), status: soundStatus } } : {}),
         ...(sc === 2
           ? {
               tm: {
@@ -291,6 +366,16 @@ export const register: Register = (on, options) => {
         selectFrame: n => void update($, selectedFrame, () => n),
         live: () => void update($, selectedFrame, () => null),
         toggleScene: () => void update($, scene, s => (s === 1 ? 2 : 1) as Scene),
+        sound: (action: SoundAction) => {
+          void (async () => {
+            const track = trackOf(await read($, sound))
+            const isDone = soundBackend !== null && soundHost !== null && (await soundBackend.control(soundHost, action, track))
+            if (!isDone) $.ui.toast(`MascotAmp couldn't reach ${track?.app ?? 'the player'}`)
+          })()
+        },
+        retrySound: () => {
+          void update($, sound, () => ({ kind: 'nothing' }) as SoundStatus).then(() => watchSound($))
+        },
       },
     )
   })

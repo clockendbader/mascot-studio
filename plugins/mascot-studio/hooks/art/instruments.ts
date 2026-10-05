@@ -4,8 +4,8 @@
 import type { MiniMood } from '../../types'
 import { level } from '../usage'
 import type { Level } from '../usage'
-import { MINI, spriteGrid } from './sprites'
-import { drawSprite, gridToCells, newGrid, textWords, wordsToCells } from './pixels'
+import { DJ, MINI, spriteGrid } from './sprites'
+import { drawSprite, gridToCells, newGrid, sanitizeForRaster, textWords, wordsToCells } from './pixels'
 
 export const LED_GREEN = 0x00ff00
 export const LED_DIM = 0x004000
@@ -81,4 +81,38 @@ export function titleBarCells(text: string, cols: number): string {
   const line = label.padEnd(cols - buttons.length - 1) + buttons + ' '
   const at = (i: number) => mix(TITLE_FROM, TITLE_TO, cols <= 1 ? 0 : i / (cols - 1))
   return wordsToCells(textWords(line, cols, WHITE, at))
+}
+
+// ── MascotAmp ────────────────────────────────────────────────────────────
+
+const BARS = '▁▂▃▄▅▆▇'
+export const VIZ_BARS = 16
+const VIZ_MAX = BARS.length - 1
+const MARQUEE_GAP = '   '
+
+/** The LCD: green on black, the text looping past `offset` like a marquee. */
+export function lcdCells(text: string, cols: number, offset: number): string {
+  const loop = [...sanitizeForRaster(text + MARQUEE_GAP)]
+  const start = ((offset % loop.length) + loop.length) % loop.length
+  let line = ''
+  for (let i = 0; i < cols; i++) line += loop[(start + i) % loop.length] ?? ' '
+  return wordsToCells(textWords(line, cols, LED_GREEN, BLACK))
+}
+
+/** The spectrum's bars, always VIZ_BARS wide: a missing value is a flat bar. */
+export function visualizerCells(heights: readonly number[]): string {
+  const bars = Array.from({ length: VIZ_BARS }, (_, i) => BARS[Math.min(VIZ_MAX, Math.max(0, Math.round(heights[i] ?? 0)))] ?? BARS[0]).join('')
+  return wordsToCells(textWords(bars, VIZ_BARS, LED_GREEN, BLACK))
+}
+
+/** The decorative spectrum's next step: a random walk while playing, flat otherwise. */
+export function nextHeights(prev: readonly number[], playing: boolean, rand: () => number): number[] {
+  return Array.from({ length: VIZ_BARS }, (_, i) =>
+    playing ? Math.min(VIZ_MAX, Math.max(0, (prev[i] ?? 0) + Math.round(rand() * 4) - 2)) : 0,
+  )
+}
+
+export function djCells(mode: 'dance' | 'sway' | 'doze', tick: number): string {
+  const frames = DJ[mode]
+  return gridToCells(spriteGrid((frames[tick % frames.length] ?? frames[0])?.rows ?? []))
 }

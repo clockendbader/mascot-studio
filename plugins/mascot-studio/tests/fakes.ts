@@ -56,3 +56,22 @@ export function fakeHost(lines: string[], answer: (argv: readonly string[]) => P
     },
   }
 }
+
+/** An async stream a test feeds line by line; `end()` finishes it. */
+export function channel<T>() {
+  const queue: (T | null)[] = []
+  let wake: (() => void) | undefined
+  const push = (value: T | null) => {
+    queue.push(value)
+    wake?.()
+  }
+  async function* read(): AsyncGenerator<T> {
+    for (;;) {
+      while (queue.length === 0) await new Promise<void>(resolve => (wake = resolve))
+      const value = queue.shift()
+      if (value === null || value === undefined) return
+      yield value
+    }
+  }
+  return { push: (value: T) => push(value), end: () => push(null), read }
+}
