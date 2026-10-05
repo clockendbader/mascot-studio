@@ -1,0 +1,11 @@
+{
+  "name": "mascot-studio-dev",
+  "private": true,
+  "description": "Development scripts for the Clawd Studio Claude Code plugin. No dependencies: the plugin ships as source.",
+  "license": "MIT",
+  "scripts": {
+    "test": "claude plugin test plugins/mascot-studio",
+    "validate": "claude plugin validate plugins/mascot-studio",
+    "smoke": "npx -y esbuild@0.28.2 scripts/smoke.ts --bundle --platform=node --format=esm --outfile=.smoke/smoke.mjs --log-level=warning && node .smoke/smoke.mjs"
+  }
+}

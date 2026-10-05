@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      DISABLE_AUTOUPDATER: '1'
+      ESBUILD: esbuild@0.28.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm install --global @anthropic-ai/claude-code@2.1.289
+
+      - name: Validate the plugin
+        run: claude plugin validate plugins/mascot-studio
+
+      - name: Run the plugin tests
+        run: claude plugin test plugins/mascot-studio
+
+      - name: Bundle the smoke check
+        run: npx -y ${{ env.ESBUILD }} scripts/smoke.ts --bundle --platform=node --format=esm --outfile=.smoke/smoke.mjs --log-level=warning
+
+      - name: Smoke the music backend without playerctl
+        if: runner.os == 'Linux'
+        env:
+          SMOKE_EXPECT: unavailable:missing-playerctl
+        run: node .smoke/smoke.mjs
+
+      - name: Install playerctl
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y playerctl
+
+      - name: Smoke the music backend
+        run: node .smoke/smoke.mjs
+
+      - name: Compile the Music AppleScripts
+        if: runner.os == 'macOS'
+        run: |
+          npx -y ${{ env.ESBUILD }} scripts/print-music-script.ts --bundle --platform=node --format=esm --outfile=.smoke/print-music-script.mjs --log-level=warning
+          node .smoke/print-music-script.mjs watch > "$RUNNER_TEMP/watch.applescript"
+          osacompile -o "$RUNNER_TEMP/watch.scpt" "$RUNNER_TEMP/watch.applescript"
+          node .smoke/print-music-script.mjs control > "$RUNNER_TEMP/control.applescript"
+          osacompile -o "$RUNNER_TEMP/control.scpt" "$RUNNER_TEMP/control.applescript"

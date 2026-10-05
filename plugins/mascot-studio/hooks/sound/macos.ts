@@ -34,6 +34,11 @@ export function appScript(app: App): string {
   ].join('\n')
 }
 
+/** The one-line script that sends a transport action to an app. */
+export function controlScript(app: App, action: SoundAction): string {
+  return `tell application "${app}" to ${VERBS[action]}`
+}
+
 /** The script's line: state, artist, title, then position and length (Spotify's length in milliseconds); a title may hold tabs. */
 export function parseAppleScript(app: string, out: string): Reading | null {
   const fields = out.replace(/\r?\n$/, '').split('\t')
@@ -100,7 +105,7 @@ export const macosBackend: SoundBackend = {
     const app = APPS.find(a => a === track?.app)
     if (app === undefined) return false
     try {
-      return (await host.run(['osascript', '-e', `tell application "${app}" to ${VERBS[action]}`])).exitCode === 0
+      return (await host.run(['osascript', '-e', controlScript(app, action)])).exitCode === 0
     } catch {
       return false
     }
