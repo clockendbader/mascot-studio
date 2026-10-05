@@ -53,6 +53,7 @@ declare module 'claude-code' {
       sound: SoundStatus
       soundFrames: number[]
       screensaver: boolean
+      visitors: number | null
     }
   }
 }

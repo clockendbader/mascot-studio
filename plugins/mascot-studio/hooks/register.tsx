@@ -38,6 +38,7 @@ const dialog = atom({ plugin: 'mascot-studio', key: 'dialog' } as const, null as
 const sound = atom({ plugin: 'mascot-studio', key: 'sound' } as const, { kind: 'nothing' } as SoundStatus)
 const soundFrames = atom({ plugin: 'mascot-studio', key: 'soundFrames' } as const, [] as number[])
 const screensaver = atom({ plugin: 'mascot-studio', key: 'screensaver' } as const, false)
+const visitors = atom({ plugin: 'mascot-studio', key: 'visitors' } as const, null as number | null)
 
 /** The cwd's last path segment, for the pane title. */
 let folder = 'untitled'
@@ -119,6 +120,16 @@ async function needsYou($: EngineInterface, text: string): Promise<void> {
   await update($, activity, last => ({ ...last, pose: 'wave', since: at }) as Activity)
 }
 
+/** Counts one more visitor (tool call) and saves the lifetime total; a failed save catches up next time. */
+async function countVisitor($: EngineInterface): Promise<void> {
+  await update($, visitors, n => (n ?? 0) + 1)
+  try {
+    await $.store.set('visitors', (await read($, visitors)) ?? 0)
+  } catch {
+    // saved with the next call
+  }
+}
+
 /** Any activity wakes the screensaver. */
 async function wake($: EngineInterface): Promise<void> {
   if (await read($, screensaver)) await update($, screensaver, () => false)
@@ -151,6 +162,11 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
     await $.command.register({ name: 'studio', description: 'Open or close Mascot Studio' })
+    if ((await read($, visitors)) === null) {
+      const stored = await $.store.get('visitors').catch(() => 0)
+      const total = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0
+      await update($, visitors, n => n ?? total)
+    }
     const animate = async () => {
       tick += 1
       now = await $.clock.now()
@@ -231,6 +247,7 @@ export const register: Register = (on, options) => {
       await update($, activity, () => ({ pose, tool, target, since: started }))
       await update($, idleSince, () => null)
       await wake($)
+      await countVisitor($)
       await clearDialog($, 'error')
       if (tool === 'AskUserQuestion') await setDialog($, { kind: 'needs-you', text: QUESTION_TEXT, at: started })
     } catch {
@@ -386,6 +403,7 @@ export const register: Register = (on, options) => {
     const turnCount = await read($, turns)
     const shownDialog = await read($, dialog)
     const isSaving = (await read($, screensaver)) && screensaverMs > 0
+    const visitorCount = await read($, visitors)
     const soundStatus = await read($, sound)
     const soundKeys = await read($, soundFrames)
     const hasSound = options.sound !== false
@@ -436,7 +454,7 @@ export const register: Register = (on, options) => {
         selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
         activity: act,
         elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
-        visitors: null,
+        visitors: visitorCount,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
         ...(hasSound ? { amp: { cols, mode: layout.amp === 'line' ? ('line' as const) : ('full' as const), status: soundStatus } } : {}),
         ...(sc === 2

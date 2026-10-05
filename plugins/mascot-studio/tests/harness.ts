@@ -56,15 +56,20 @@ async function* noOutput(): AsyncIterable<Piece> {}
  * Stands beneath the plugin as the engine: answers every call the plugin
  * makes on `$` and records what it asked for.
  */
-export type Control = { usage: unknown; usageDeny?: string }
+export type Control = { usage: unknown; usageDeny?: string; store: Map<string, unknown>; storeDeny?: string }
 
 export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; clock: MockClock; ctl: Control } {
-  const ctl: Control = { usage: opts.usage ?? DEFAULT_USAGE }
+  const ctl: Control = { usage: opts.usage ?? DEFAULT_USAGE, store: new Map(Object.entries(opts.store ?? {})) }
   const rec: Recorder = { opened: [], closed: [], statuses: [], toasts: [], blits: [], runs: [], spawns: [] }
   const open = new Map<string, string>()
   const clock = mock.clock(on, { now: opts.now ?? DEFAULT_NOW })
   mock.env(on, opts.os === 'windows' ? { OS: 'Windows_NT' } : {})
-  mock.store(on, opts.store ?? {})
+  on('store.get', async (_$, e) => ({ value: ctl.store.get(e.key) }) as never)
+  on('store.set', async (_$, e) => {
+    if (ctl.storeDeny !== undefined) return { deny: ctl.storeDeny } as never
+    ctl.store.set(e.key, e.value)
+    return { value: undefined } as never
+  })
 
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.usage', async () => (ctl.usageDeny !== undefined ? { deny: ctl.usageDeny } : { value: ctl.usage }) as never)
