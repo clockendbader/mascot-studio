@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Activity, Dialog, Keyframe, Opener, Scene, SoundAction, SoundStatus, UsageSnapshot } from '../types'
 import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
 import { nextHeights } from './art/instruments'
-import { rasterFrames } from './animator'
+import { TICK_MS, rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
 import { QUESTION_TEXT, needsYouText, notifiedText, statusLine } from './alerts'
@@ -23,7 +23,6 @@ import { studioView } from './views/studio'
 const PANE = 'mascot-studio'
 const HOP_MS = 1500
 const ERROR_DIALOG_MS = 8000
-const TICK_MS = 166
 
 const opener = atom({ plugin: 'mascot-studio', key: 'opener' } as const, null as Opener)
 const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { pose: 'asleep', since: 0 } as Activity)
@@ -38,6 +37,7 @@ const contextHistory = atom({ plugin: 'mascot-studio', key: 'contextHistory' } a
 const dialog = atom({ plugin: 'mascot-studio', key: 'dialog' } as const, null as Dialog)
 const sound = atom({ plugin: 'mascot-studio', key: 'sound' } as const, { kind: 'nothing' } as SoundStatus)
 const soundFrames = atom({ plugin: 'mascot-studio', key: 'soundFrames' } as const, [] as number[])
+const screensaver = atom({ plugin: 'mascot-studio', key: 'screensaver' } as const, false)
 
 /** The cwd's last path segment, for the pane title. */
 let folder = 'untitled'
@@ -119,6 +119,13 @@ async function needsYou($: EngineInterface, text: string): Promise<void> {
   await update($, activity, last => ({ ...last, pose: 'wave', since: at }) as Activity)
 }
 
+/** Any activity wakes the screensaver. */
+async function wake($: EngineInterface): Promise<void> {
+  if (await read($, screensaver)) await update($, screensaver, () => false)
+}
+
+const SCREENSAVER_CHECK_TICKS = 6
+
 /** Takes the engine's usage figures, if they look like figures. */
 function isRawUsage(value: unknown): value is RawUsage {
   const v = value as { context?: unknown; rateLimits?: unknown } | null
@@ -139,12 +146,18 @@ function failureOf(result: unknown): string | undefined {
 }
 
 export const register: Register = (on, options) => {
+  const screensaverMs = Math.max(0, Number(options.screensaverMinutes ?? 5)) * 60_000
+
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
     await $.command.register({ name: 'studio', description: 'Open or close Mascot Studio' })
     const animate = async () => {
       tick += 1
       now = await $.clock.now()
+      if (screensaverMs > 0 && tick % SCREENSAVER_CHECK_TICKS === 0) {
+        const quiet = await read($, idleSince)
+        if (quiet !== null && now - quiet >= screensaverMs && !(await read($, screensaver))) await update($, screensaver, () => true)
+      }
       const last = drawn
       if (last === null || last.mounted.size === 0) return
       if (last.model.amp !== undefined) {
@@ -217,6 +230,7 @@ export const register: Register = (on, options) => {
       })
       await update($, activity, () => ({ pose, tool, target, since: started }))
       await update($, idleSince, () => null)
+      await wake($)
       await clearDialog($, 'error')
       if (tool === 'AskUserQuestion') await setDialog($, { kind: 'needs-you', text: QUESTION_TEXT, at: started })
     } catch {
@@ -261,6 +275,7 @@ export const register: Register = (on, options) => {
       await update($, activity, () => ({ pose: 'thinking', since: now }) as Activity)
       await update($, scene, () => 1 as Scene)
       await update($, turnStartedAt, () => now)
+      await wake($)
       await update($, idleSince, () => null)
     } catch {
       // observing only
@@ -318,6 +333,7 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     try {
       await clearDialog($, 'needs-you')
+      await wake($)
     } catch {
       // observing only
     }
@@ -369,6 +385,7 @@ export const register: Register = (on, options) => {
     const quietSince = await read($, idleSince)
     const turnCount = await read($, turns)
     const shownDialog = await read($, dialog)
+    const isSaving = (await read($, screensaver)) && screensaverMs > 0
     const soundStatus = await read($, sound)
     const soundKeys = await read($, soundFrames)
     const hasSound = options.sound !== false
@@ -376,7 +393,14 @@ export const register: Register = (on, options) => {
     const current = frames.at(-1)?.n ?? 0
 
     const model: AnimModel = {}
-    if (!layout.tooNarrow && sc === 1) model.stage = { cols, pose: act.pose, hat: hatFor(new Date(at)), screensaver: null }
+    if (!layout.tooNarrow && (sc === 1 || isSaving)) {
+      model.stage = {
+        cols,
+        pose: act.pose,
+        hat: hatFor(new Date(at)),
+        screensaver: isSaving ? { since: (quietSince ?? at) + screensaverMs } : null,
+      }
+    }
     if (!layout.tooNarrow && layout.amp === 'full') {
       model.amp = {
         lcdCols: cols - 14,
@@ -385,7 +409,7 @@ export const register: Register = (on, options) => {
         heights: vizHeights,
       }
     }
-    if (!layout.tooNarrow && sc === 2) {
+    if (!layout.tooNarrow && sc === 2 && !isSaving) {
       model.tm = {
         ...taskManagerSizes(cols),
         samples: history,
@@ -407,6 +431,7 @@ export const register: Register = (on, options) => {
         keyframes: frames,
         soundFrames: soundKeys,
         dialog: shownDialog,
+        screensaver: isSaving,
         current,
         selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
         activity: act,

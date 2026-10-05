@@ -1,7 +1,11 @@
 import type { Hat, Pose } from '../types'
 import { VIZ_BARS, djCells, historyCells, lcdCells, ledMeterCells, titleBarCells, visualizerCells } from './art/instruments'
+import { screensaverCells, screensaverKindAt } from './art/screensavers'
 import { STAGE_ROWS, stageCells } from './art/stage'
 import { miniMood } from './usage'
+
+export const TICK_MS = 166
+const SCREENSAVER_TURN_MS = 60_000
 
 export type RasterKey = 'stage' | 'tm-title' | 'ctx-meter' | 'ctx-graph' | 'lcd' | 'viz' | 'dj'
 export type RasterFrame = { key: RasterKey; columns: number; rows: number; cells: string }
@@ -28,7 +32,8 @@ export type AmpAnim = {
 }
 
 export type AnimModel = {
-  stage?: { cols: number; pose: Pose; hat: Hat; screensaver: null }
+  /** `screensaver.since`: when the screensaver started; which one shows and how far it has run follow from the clock. */
+  stage?: { cols: number; pose: Pose; hat: Hat; screensaver: { since: number } | null }
   tm?: TaskManagerAnim
   amp?: AmpAnim
 }
@@ -37,8 +42,16 @@ export type AnimModel = {
 export function rasterFrames(m: AnimModel, tick: number, now: number): RasterFrame[] {
   const frames: RasterFrame[] = []
   if (m.stage !== undefined) {
-    const { cols, pose, hat } = m.stage
-    frames.push({ key: 'stage', columns: cols, rows: STAGE_ROWS, cells: stageCells({ cols, rows: STAGE_ROWS, pose, hat, tick }) })
+    const { cols, pose, hat, screensaver } = m.stage
+    if (screensaver === null) {
+      frames.push({ key: 'stage', columns: cols, rows: STAGE_ROWS, cells: stageCells({ cols, rows: STAGE_ROWS, pose, hat, tick }) })
+    } else {
+      const running = Math.max(0, now - screensaver.since)
+      const kind = screensaverKindAt(running)
+      const local = Math.floor((running % SCREENSAVER_TURN_MS) / TICK_MS)
+      const seed = screensaver.since + Math.floor(running / SCREENSAVER_TURN_MS)
+      frames.push({ key: 'stage', columns: cols, rows: STAGE_ROWS, cells: screensaverCells(kind, cols, STAGE_ROWS, local, seed) })
+    }
   }
   if (m.tm !== undefined) {
     const tm = m.tm

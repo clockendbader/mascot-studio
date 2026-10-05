@@ -29,6 +29,7 @@ export type StudioVM = {
   tm?: TaskManagerVM
   amp?: AmpVM
   dialog: Dialog
+  screensaver: boolean
 }
 
 export type StudioActions = TimelineActions &
@@ -129,7 +130,7 @@ export function studioView(els: Els, vm: StudioVM, act: StudioActions) {
         {separator(els, 'Timeline', cols)}
         {timelineView(els, vm, act)}
       </Box>
-      {vm.scene === 1 ? (
+      {vm.scene === 1 || vm.screensaver ? (
         <Box key="stage-section" flexDirection="column">
           {separator(els, 'Stage', cols)}
           {rasterOf(els, vm.frames.stage)}

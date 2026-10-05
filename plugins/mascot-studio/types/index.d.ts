@@ -52,6 +52,7 @@ declare module 'claude-code' {
       dialog: Dialog
       sound: SoundStatus
       soundFrames: number[]
+      screensaver: boolean
     }
   }
 }
