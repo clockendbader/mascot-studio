@@ -62,6 +62,8 @@ test('a refused Automation permission says so', async () => {
 test('the AppleScript never launches an app', () => {
   expect(appScript('Music')).toStartWith('tell application "Music"')
   expect(appScript('Music')).toContain('player state is stopped')
+  expect(appScript('Spotify')).toContain('player position')
+  expect(appScript('Spotify')).toContain('duration of current track')
 })
 
 test('control tells the app shown', async () => {

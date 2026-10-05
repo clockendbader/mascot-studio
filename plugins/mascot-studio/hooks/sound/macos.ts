@@ -2,11 +2,12 @@
 // running apps first, so no app is ever launched and no script is compiled
 // against an app that is not installed.
 
-import type { SoundAction, SoundStatus, Track } from '../../types'
+import type { Progress, SoundAction, SoundStatus, Track } from '../../types'
+import { numberIn, progressOf } from './progress'
 import type { SoundBackend, SoundHost } from './types'
 
 type App = 'Music' | 'Spotify'
-type Reading = Track & { state: 'playing' | 'paused' }
+type Reading = Track & { state: 'playing' | 'paused'; progress?: Progress }
 
 const APPS: readonly App[] = ['Music', 'Spotify']
 const POLL_MS = 2000
@@ -18,18 +19,31 @@ export function appScript(app: App): string {
     `tell application "${app}"`,
     '  try',
     '    if player state is stopped then return "stopped"',
-    '    return (player state as text) & tab & (artist of current track) & tab & (name of current track)',
+    '    set head to (player state as text) & tab & (artist of current track) & tab & (name of current track)',
     '  on error',
     '    return "stopped"',
     '  end try',
+    '  set pos to ""',
+    '  set len to ""',
+    '  try',
+    '    set pos to (player position as text)',
+    '    set len to ((duration of current track) as text)',
+    '  end try',
+    '  return head & tab & pos & tab & len',
     'end tell',
   ].join('\n')
 }
 
+/** The script's line: state, artist, title, then position and length (Spotify's length in milliseconds); a title may hold tabs. */
 export function parseAppleScript(app: string, out: string): Reading | null {
-  const [state, artist, ...title] = out.replace(/\r?\n$/, '').split('\t')
+  const fields = out.replace(/\r?\n$/, '').split('\t')
+  const [state, artist] = fields
   if ((state !== 'playing' && state !== 'paused') || artist === undefined) return null
-  return { app, title: title.join('\t'), artist, state }
+  const hasTimes = fields.length >= 5
+  const title = (hasTimes ? fields.slice(2, -2) : fields.slice(2)).join('\t')
+  const lengthScale = app === 'Spotify' ? 1000 : 1
+  const progress = hasTimes ? progressOf(numberIn(fields.at(-2)), numberIn(fields.at(-1)) / lengthScale) : undefined
+  return { app, title, artist, state, ...(progress === undefined ? {} : { progress }) }
 }
 
 /** A playing app wins; otherwise the paused app shown last; otherwise any paused app. */
@@ -39,8 +53,8 @@ export function choosePlayer(readings: readonly Reading[], lastPausedApp: string
     readings.find(r => r.app === lastPausedApp) ??
     readings[0]
   if (pick === undefined) return { kind: 'nothing' }
-  const { state, ...track } = pick
-  return { kind: state, track }
+  const { state, progress, ...track } = pick
+  return { kind: state, track, ...(progress === undefined ? {} : { progress }) }
 }
 
 async function poll(host: SoundHost, lastApp: string | null): Promise<SoundStatus> {

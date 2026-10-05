@@ -2,6 +2,7 @@
 // helper through WinRT; play/pause/next/previous are one-shot runs.
 
 import type { SoundAction, SoundStatus } from '../../types'
+import { progressOf } from './progress'
 import { watchLines } from './supervisor'
 import type { SoundBackend } from './types'
 
@@ -25,11 +26,18 @@ export const WATCH_SCRIPT = [
   'while ($true) {',
   '  try {',
   '    $s = $mgr.GetCurrentSession()',
-  `    if ($null -eq $s) { $line = '{"none":true}' } else {`,
+  `    if ($null -eq $s) { $line = '{"none":true}'; $key = 'none' } else {`,
   '      $p = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])',
-  '      $line = [pscustomobject]@{ app = $s.SourceAppUserModelId; title = $p.Title; artist = $p.Artist; status = $s.GetPlaybackInfo().PlaybackStatus.ToString() } | ConvertTo-Json -Compress',
+  '      $st = $s.GetPlaybackInfo().PlaybackStatus.ToString()',
+  '      $tl = $s.GetTimelineProperties()',
+  '      $pos = $tl.Position.TotalSeconds',
+  '      # the position is as of LastUpdatedTime; a playing track has moved on since',
+  "      if ($st -eq 'Playing' -and $tl.LastUpdatedTime.Year -gt 2000) { $pos += ([DateTimeOffset]::Now - $tl.LastUpdatedTime).TotalSeconds }",
+  '      $key = "$($s.SourceAppUserModelId)|$($p.Title)|$($p.Artist)|$st|$($tl.LastUpdatedTime.UtcTicks)|$($tl.EndTime.Ticks)"',
+  '      $line = [pscustomobject]@{ app = $s.SourceAppUserModelId; title = $p.Title; artist = $p.Artist; status = $st; position = [math]::Round($pos, 1); duration = [math]::Round($tl.EndTime.TotalSeconds, 1) } | ConvertTo-Json -Compress',
   '    }',
-  '    if ($line -ne $last) { [Console]::Out.WriteLine($line); [Console]::Out.Flush(); $last = $line }',
+  '    # a line goes out when the track, the state or the timeline changes, never just because time passed',
+  '    if ($key -ne $last) { [Console]::Out.WriteLine($line); [Console]::Out.Flush(); $last = $key }',
   '  } catch {',
   '    # a session that closed mid-read: try again on the next poll',
   '  }',
@@ -81,6 +89,7 @@ export function appName(id: string): string {
 }
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
+const seconds = (value: unknown) => (typeof value === 'number' ? value : Number.NaN)
 
 export function parseSmtcLine(line: string): SoundStatus | null {
   let data: unknown
@@ -93,8 +102,10 @@ export function parseSmtcLine(line: string): SoundStatus | null {
   const fields = data as Record<string, unknown>
   if (fields.none === true) return { kind: 'nothing' }
   const track = { app: appName(text(fields.app)), title: text(fields.title), artist: text(fields.artist) }
-  if (fields.status === 'Playing') return { kind: 'playing', track }
-  if (fields.status === 'Paused') return { kind: 'paused', track }
+  const progress = progressOf(seconds(fields.position), seconds(fields.duration))
+  const extra = progress === undefined ? {} : { progress }
+  if (fields.status === 'Playing') return { kind: 'playing', track, ...extra }
+  if (fields.status === 'Paused') return { kind: 'paused', track, ...extra }
   return { kind: 'nothing' }
 }
 

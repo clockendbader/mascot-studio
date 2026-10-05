@@ -1,5 +1,6 @@
 import type { Hat, Pose, ThemeName } from '../types'
-import { VIZ_BARS, djCells, historyCells, lcdCells, visualizerCells } from './art/instruments'
+import { djCells, historyCells, progressCells } from './art/instruments'
+import type { ProgressAt } from './art/instruments'
 import { screensaverCells, screensaverKindAt } from './art/screensavers'
 import { STAGE_ROWS, stageCells } from './art/stage'
 import { THEMES } from './themes'
@@ -8,25 +9,26 @@ export const TICK_MS = 166
 const SCREENSAVER_TURN_MS = 60_000
 const ASLEEP_AFTER_MS = 60_000
 
-export type RasterKey = 'stage' | 'ctx-graph' | 'lcd' | 'viz' | 'dj'
+export type RasterKey = 'stage' | 'ctx-graph' | 'dj' | 'progress'
 export type RasterFrame = { key: RasterKey; columns: number; rows: number; cells: string }
 
 /** The Usage tab's context history graph. */
 export type UsageAnim = { graphCols: number; samples: number[]; colors: { bg: number; grid: number; line: number } }
 
-export type AmpAnim = {
-  lcdCols: number
-  /** The LCD text, or null when an explanation replaces the LCD. */
-  marquee: string | null
+/** The Music tab: the DJ blob (when the tab is tall enough) and the song's progress row (when a song shows). */
+export type MusicAnim = {
+  theme: ThemeName
+  dj: boolean
   mode: 'dance' | 'sway' | 'doze'
-  heights: number[]
+  /** `value` is the player's last report; the ticker swaps in the newest one each tick. */
+  progress: { cols: number; playing: boolean; value: ProgressAt | null } | null
 }
 
 export type AnimModel = {
   /** `screensaver.since`: when the screensaver started; which one shows and how far it has run follow from the clock. */
   stage?: { cols: number; pose: Pose; hat: Hat; theme: ThemeName; idleSince: number | null; screensaver: { since: number } | null }
   usage?: UsageAnim
-  amp?: AmpAnim
+  music?: MusicAnim
 }
 
 /** Every raster the pane shows, drawn for one animation tick. */
@@ -51,11 +53,13 @@ export function rasterFrames(m: AnimModel, tick: number, now: number): RasterFra
     const u = m.usage
     frames.push({ key: 'ctx-graph', columns: u.graphCols, rows: 2, cells: historyCells(u.samples, u.graphCols, 2, u.colors) })
   }
-  if (m.amp !== undefined) {
-    const amp = m.amp
-    frames.push({ key: 'dj', columns: 10, rows: 5, cells: djCells(amp.mode, tick) })
-    if (amp.marquee !== null) frames.push({ key: 'lcd', columns: amp.lcdCols, rows: 1, cells: lcdCells(amp.marquee, amp.lcdCols, Math.floor(tick / 2)) })
-    frames.push({ key: 'viz', columns: VIZ_BARS, rows: 1, cells: visualizerCells(amp.heights) })
+  if (m.music !== undefined) {
+    const { dj, mode, progress } = m.music
+    const theme = THEMES[m.music.theme]
+    if (dj) frames.push({ key: 'dj', columns: 10, rows: 5, cells: djCells(mode, tick, parseInt(theme.music.bg.slice(1), 16)) })
+    if (progress !== null) {
+      frames.push({ key: 'progress', columns: progress.cols, rows: 1, cells: progressCells(progress.value, progress.playing, now, progress.cols, theme) })
+    }
   }
   return frames
 }

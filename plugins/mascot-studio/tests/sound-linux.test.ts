@@ -3,7 +3,7 @@ import { linuxBackend, parsePlayerctlLine, playerName } from '../hooks/sound/lin
 import type { SoundStatus } from '../types'
 import { fakeHost, flush } from './fakes'
 
-const FOLLOW = ['playerctl', '--follow', 'metadata', '--format', '{{status}}\t{{playerName}}\t{{artist}}\t{{title}}']
+const FOLLOW = ['playerctl', '--follow', 'metadata', '--format', '{{status}}\t{{playerName}}\t{{artist}}\t{{title}}\t{{position}}\t{{mpris:length}}']
 
 describe('parsePlayerctlLine', () => {
   test('reads a playing track', () => {

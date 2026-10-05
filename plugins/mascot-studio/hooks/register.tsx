@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, Dialog, Keyframe, Opener, SoundAction, SoundStatus, Tab, ThemeName, UsageSnapshot } from '../types'
+import type { Activity, Dialog, Keyframe, Opener, Progress, SoundAction, SoundStatus, Tab, ThemeName, UsageSnapshot } from '../types'
 import { finishKeyframe, firstLine, parseClientMessage, poseForTool, startKeyframe, stepTarget, targetOf } from './activity'
 import type { StepAction } from './activity'
-import { clipColor, filmstripCells, nextHeights } from './art/instruments'
+import { clipColor, filmstripCells } from './art/instruments'
+import type { ProgressAt } from './art/instruments'
 import { TICK_MS, rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
@@ -16,7 +17,7 @@ import type { RowSegment } from './client/row'
 import { pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
 import { usageControls, usageTabView } from './views/usageTab'
-import { marqueeOf } from './views/mascotAmp'
+import { musicControls, musicLayout, musicOffView, musicTabView } from './views/musicTab'
 import { linuxBackend } from './sound/linux'
 import { macosBackend } from './sound/macos'
 import { detectOs } from './sound/platform'
@@ -85,15 +86,41 @@ let soundHost: SoundHost | null = null
 let stopSound: (() => void) | null = null
 /** The OS this session runs on, detected at start; picks the auto theme and the sound backend. */
 let osName: Os = 'other'
-/** The decorative spectrum's bars, walked each tick. */
-let vizHeights: number[] = []
+/**
+ * Where the song is, as the player last said, stamped with the plugin's clock. It lives here and
+ * not in state: it changes every report, and the ticker moves the progress row on its own.
+ */
+let soundProgress: ProgressAt | null = null
 
 const trackOf = (s: SoundStatus) => (s.kind === 'playing' || s.kind === 'paused' ? s.track : undefined)
 
-/** Records a sound status; an unchanged one costs nothing. */
+/** Records a sound status: the progress goes aside, and an unchanged status costs nothing. */
 async function applySound($: EngineInterface, next: SoundStatus): Promise<void> {
-  if (JSON.stringify(await read($, sound)) === JSON.stringify(next)) return
-  await update($, sound, () => next)
+  const { progress, ...status } = next as SoundStatus & { progress?: Progress }
+  soundProgress = progress === undefined ? null : { ...progress, at: await $.clock.now() }
+  if (JSON.stringify(await read($, sound)) === JSON.stringify(status)) return
+  await update($, sound, () => status as SoundStatus)
+}
+
+type MusicControl = 'back' | 'play' | 'skip' | 'retry'
+const MUSIC_CONTROLS: Readonly<Record<string, MusicControl>> = { back: 'back', play: 'play', skip: 'skip', retry: 'retry' }
+const SOUND_ACTIONS: Readonly<Record<Exclude<MusicControl, 'retry'>, SoundAction>> = { back: 'previous', play: 'play-pause', skip: 'next' }
+const SOUND_DONE: Readonly<Record<Exclude<MusicControl, 'retry'>, string>> = { back: 'previous track', play: 'play/pause', skip: 'next track' }
+const MUSIC_OFF = 'Music is off. Turn it on in /config.'
+
+/** Runs a music button: the player's transport, or a fresh watch for retry. `ok` is false when the player could not be reached. */
+async function runMusic($: EngineInterface, control: MusicControl, hasSound: boolean): Promise<{ ok: boolean; text: string }> {
+  if (!hasSound) return { ok: false, text: MUSIC_OFF }
+  if (control === 'retry') {
+    soundProgress = null
+    await update($, sound, () => ({ kind: 'nothing' }) as SoundStatus)
+    watchSound($)
+    return { ok: true, text: 'Reconnecting to music.' }
+  }
+  const track = trackOf(await read($, sound))
+  const app = track?.app ?? 'the player'
+  const ok = soundBackend !== null && soundHost !== null && (await soundBackend.control(soundHost, SOUND_ACTIONS[control], track))
+  return { ok, text: ok ? `${app}: ${SOUND_DONE[control]}.` : `Couldn't reach ${app}.` }
 }
 
 /** (Re)starts watching the system's now-playing with this OS's backend. */
@@ -173,6 +200,7 @@ function failureOf(result: unknown): string | undefined {
 
 export const register: Register = (on, options) => {
   const screensaverMs = Math.max(0, Number(options.screensaverMinutes ?? 5)) * 60_000
+  const hasSound = options.sound !== false
 
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
@@ -191,10 +219,8 @@ export const register: Register = (on, options) => {
       }
       const last = drawn
       if (last === null || last.mounted.size === 0) return
-      if (last.model.amp !== undefined) {
-        vizHeights = nextHeights(vizHeights, last.model.amp.mode === 'dance', Math.random)
-        last.model.amp.heights = vizHeights
-      }
+      const progressRow = last.model.music?.progress
+      if (progressRow != null) progressRow.value = soundProgress
       for (const frame of rasterFrames(last.model, tick, now)) {
         if (!last.mounted.has(frame.key)) continue
         const painted = await $.ui.blit({ requestId: PANE, key: frame.key, cells: frame.cells })
@@ -222,7 +248,7 @@ export const register: Register = (on, options) => {
       // no figures yet; session.measure brings them
     }
     osName = await detectOs(await $.env.get('OS'), async () => (await $.process.run(['uname', '-s'])).stdout).catch(() => 'other' as Os)
-    if (options.sound !== false) {
+    if (hasSound) {
       now = await $.clock.now()
       soundHost = {
         run: (argv, timeoutMs) => $.process.run([...argv], timeoutMs === undefined ? undefined : { timeoutMs }),
@@ -271,8 +297,12 @@ export const register: Register = (on, options) => {
       const pinned = await step($, verb)
       return { text: pinned === null ? 'Back to live.' : `Showing step ${pinned}.` }
     }
+    const control = MUSIC_CONTROLS[verb]
+    if (control !== undefined) return { text: (await runMusic($, control, hasSound)).text }
     if (verb !== '') {
-      return { text: 'Try /studio, /studio timeline | usage | music, /studio prev | next | live, or /studio theme <windows7 | macos | ubuntu>.' }
+      return {
+        text: 'Try /studio, /studio timeline | usage | music, /studio prev | next | live, /studio play | back | skip, or /studio theme <windows7 | macos | ubuntu>.',
+      }
     }
     if (isOpen) {
       await $.ui.close({ id: PANE })
@@ -413,6 +443,11 @@ export const register: Register = (on, options) => {
       if (message !== null && 'pick' in message) await step($, { pick: message.pick })
       if (click === 'prev' || click === 'next' || click === 'live') await step($, click)
       if (click === 'details') await update($, usageDetails, shown => !shown)
+      const control = click === null ? undefined : MUSIC_CONTROLS[click]
+      if (control !== undefined) {
+        const done = await runMusic($, control, hasSound)
+        if (!done.ok) $.ui.toast(done.text.replace(/\.$/, ''))
+      }
       if (click !== null) {
         if (click.startsWith('tab:') && TAB_NAMES[click.slice(4)] !== undefined) {
           const chosen = TAB_NAMES[click.slice(4)] as Tab
@@ -482,7 +517,6 @@ export const register: Register = (on, options) => {
     const isSaving = (await read($, screensaver)) && screensaverMs > 0
     const visitorCount = await read($, visitors)
     const soundStatus = await read($, sound)
-    const hasSound = options.sound !== false
     const layout = layoutV2(cols, rows)
     const current = frames.at(-1)?.n ?? 0
 
@@ -497,12 +531,14 @@ export const register: Register = (on, options) => {
         screensaver: isSaving ? { since: (quietSince ?? at) + screensaverMs } : null,
       }
     }
+    const musicFit = musicLayout(cols, layout.content)
+    const hasSong = soundStatus.kind === 'playing' || soundStatus.kind === 'paused'
     if (!layout.tooNarrow && hasSound && shownTab === 'music') {
-      model.amp = {
-        lcdCols: cols - 14,
-        marquee: marqueeOf(soundStatus),
+      model.music = {
+        theme: theme.name,
+        dj: musicFit.full,
         mode: soundStatus.kind === 'playing' ? 'dance' : soundStatus.kind === 'paused' ? 'sway' : 'doze',
-        heights: vizHeights,
+        progress: hasSong ? { cols: musicFit.progressCols, playing: soundStatus.kind === 'playing', value: soundProgress } : null,
       }
     }
     const details = await read($, usageDetails)
@@ -513,8 +549,12 @@ export const register: Register = (on, options) => {
     const rasters = rasterFrames(model, tick, at)
     drawn = { model, mounted: new Set(rasters.map(frame => frame.key)) }
 
-    const row = (key: string, segments: RowSegment[]) =>
-      faulted.has(key) ? segmentsText(els, segments) : <els.Client key={key} module="./client/row.tsx" props={{ segments }} width={cols} height={1} />
+    const row = (key: string, segments: RowSegment[], width = cols) =>
+      faulted.has(key) ? segmentsText(els, segments) : <els.Client key={key} module="./client/row.tsx" props={{ segments }} width={width} height={1} />
+    const rasterOf = (key: RasterKey) => {
+      const frame = rasters.find(f => f.key === key)
+      return frame === undefined ? null : <els.Raster key={frame.key} columns={frame.columns} rows={frame.rows} cells={frame.cells} />
+    }
     const fiveHour = figures.rateLimits.find(limit => limit.kind === 'five_hour')?.percentUsed
     const song = trackOf(soundStatus)?.title
     const pinned = selected === null ? null : (frames.find(frame => frame.n === selected) ?? null)
@@ -542,19 +582,32 @@ export const register: Register = (on, options) => {
             row('tl-controls', timelineControls(theme, cols, pinned !== null)),
           )
         : null
-    const graphFrame = rasters.find(frame => frame.key === 'ctx-graph')
     const usageTree =
       shownTab === 'usage' && !layout.tooNarrow
         ? usageTabView(
             els,
             { cols, theme, usage: figures, turns: turnCount, toolCalls: current, details, now: new Date(at) },
-            graphFrame === undefined ? null : <els.Raster key="ctx-graph" columns={graphFrame.columns} rows={graphFrame.rows} cells={graphFrame.cells} />,
+            rasterOf('ctx-graph'),
             row('usage-controls', usageControls(theme, cols, details)),
           )
         : null
+    const musicButtons = musicControls(theme, musicFit.rightCols, soundStatus)
+    const musicTree =
+      shownTab !== 'music' || layout.tooNarrow
+        ? null
+        : hasSound
+          ? musicTabView(
+              els,
+              { cols, height: layout.content, theme, status: soundStatus },
+              rasterOf('dj'),
+              rasterOf('progress'),
+              musicButtons === null ? null : row('music-controls', musicButtons, musicFit.rightCols),
+            )
+          : musicOffView(els, theme)
     const parts = {
       timeline,
       usage: usageTree,
+      music: musicTree,
       title: row('title', titleSegments(theme, cols)),
       tabs: row('tabs', tabSegments(theme, cols, shownTab)),
       status: row('status', statusSegments(theme, cols, {
@@ -580,21 +633,8 @@ export const register: Register = (on, options) => {
         elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
         visitors: visitorCount,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
-        ...(hasSound ? { amp: { cols, mode: 'full' as const, status: soundStatus } } : {}),
       },
-      {
-        dismissDialog: () => void setDialog($, null),
-        sound: (action: SoundAction) => {
-          void (async () => {
-            const track = trackOf(await read($, sound))
-            const isDone = soundBackend !== null && soundHost !== null && (await soundBackend.control(soundHost, action, track))
-            if (!isDone) $.ui.toast(`MascotAmp couldn't reach ${track?.app ?? 'the player'}`)
-          })()
-        },
-        retrySound: () => {
-          void update($, sound, () => ({ kind: 'nothing' }) as SoundStatus).then(() => watchSound($))
-        },
-      },
+      { dismissDialog: () => void setDialog($, null) },
       parts,
     )
   })

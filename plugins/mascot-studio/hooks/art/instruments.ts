@@ -1,29 +1,22 @@
-// Period instruments drawn as Rasters: the Task Manager's LED meter, its
-// scrolling history graph (with the mini mascot), and the title bar.
+// Instruments drawn as Rasters: the Usage tab's history graph, the Music
+// tab's DJ blob and progress row, and the Timeline's film strip fallback.
 
-import type { Keyframe } from '../../types'
-import { level } from '../usage'
-import type { Level } from '../usage'
-import { TRANSPARENT, gridToCells, newGrid, sanitizeForRaster, textWords, wordsToCells } from './pixels'
+import type { Keyframe, Progress } from '../../types'
+import type { Theme } from '../themes'
+import { TRANSPARENT, gridToCells, newGrid, wordsToCells } from './pixels'
 
 export const LED_GREEN = 0x00ff00
-export const LED_DIM = 0x004000
 export const GRID = 0x008040
 const BLACK = 0x000000
-const WHITE = 0xffffff
-const TITLE_FROM = 0x0a246a
-const TITLE_TO = 0xa6caf0
-
-const LIT: Readonly<Record<Level, number>> = { ok: LED_GREEN, warn: 0xffb000, critical: 0xff3030 }
 
 function heightOf(pct: number, h: number): number {
   return Math.round((Math.min(100, Math.max(0, pct)) / 100) * (h - 1))
 }
 
-/** The scrolling graph on its grid, newest sample at the right (green on black unless themed). */
 export type GraphColors = { bg: number; grid: number; line: number }
 const TASK_MANAGER: GraphColors = { bg: BLACK, grid: GRID, line: LED_GREEN }
 
+/** The scrolling graph on its grid, newest sample at the right (green on black unless themed). */
 export function historyCells(
   samples: readonly number[],
   cols: number,
@@ -48,36 +41,61 @@ export function historyCells(
   return gridToCells(g)
 }
 
-// ── MascotAmp ────────────────────────────────────────────────────────────
+// ── Music ────────────────────────────────────────────────────────────────
 
-const BARS = '▁▂▃▄▅▆▇'
-export const VIZ_BARS = 16
-const VIZ_MAX = BARS.length - 1
-const MARQUEE_GAP = '   '
+/** A progress row with its player's clock: the position as of `at` (ms on the plugin's clock). */
+export type ProgressAt = Progress & { at: number }
 
-/** The LCD: green on black, the text looping past `offset` like a marquee. */
-export function lcdCells(text: string, cols: number, offset: number): string {
-  const loop = [...sanitizeForRaster(text + MARQUEE_GAP)]
-  const start = ((offset % loop.length) + loop.length) % loop.length
-  let line = ''
-  for (let i = 0; i < cols; i++) line += loop[(start + i) % loop.length] ?? ' '
-  return wordsToCells(textWords(line, cols, LED_GREEN, BLACK))
+/** Seconds as m:ss, or h:mm:ss from an hour. */
+export function clockText(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const ss = String(s % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
-/** The spectrum's bars, always VIZ_BARS wide: a missing value is a flat bar. */
-export function visualizerCells(heights: readonly number[]): string {
-  const bars = Array.from({ length: VIZ_BARS }, (_, i) => BARS[Math.min(VIZ_MAX, Math.max(0, Math.round(heights[i] ?? 0)))] ?? BARS[0]).join('')
-  return wordsToCells(textWords(bars, VIZ_BARS, LED_GREEN, BLACK))
+const BAR = 0x2501
+const SPACE = 0x20
+const hex = (color: string) => parseInt(color.slice(1), 16)
+
+/**
+ * The Music tab's progress row, one raster row `cols` wide: the time played, the bar and the
+ * track's length. While playing, the position moves on from `p.at` with the clock; it never
+ * runs past the end. Without progress the row is a bare bar in the track colour.
+ */
+export function progressCells(p: ProgressAt | null, playing: boolean, now: number, cols: number, theme: Theme): string {
+  const { bg, soft, progress, track } = theme.music
+  const back = hex(bg)
+  const words = new Uint32Array(cols * 3)
+  let x = 0
+  const put = (cp: number, fg: number) => {
+    if (x < cols) words.set([cp, fg, back], 3 * x++)
+  }
+  const write = (text: string, fg: number) => {
+    for (const ch of text) put(ch.codePointAt(0) ?? SPACE, fg)
+  }
+  if (p === null) {
+    while (x < cols) put(BAR, hex(track))
+    return wordsToCells(words)
+  }
+  const position = Math.min(p.duration, Math.max(0, p.position + (playing ? (now - p.at) / 1000 : 0)))
+  const played = clockText(position)
+  const length = clockText(p.duration)
+  const barCols = cols - played.length - length.length - 2
+  if (barCols < 4) {
+    write(`${played}/${length}`, hex(soft))
+  } else {
+    const lit = Math.round((position / p.duration) * barCols)
+    write(`${played} `, hex(soft))
+    for (let i = 0; i < barCols; i++) put(BAR, hex(i < lit ? progress : track))
+    write(` ${length}`, hex(soft))
+  }
+  while (x < cols) put(SPACE, hex(soft))
+  return wordsToCells(words)
 }
 
-/** The decorative spectrum's next step: a random walk while playing, flat otherwise. */
-export function nextHeights(prev: readonly number[], playing: boolean, rand: () => number): number[] {
-  return Array.from({ length: VIZ_BARS }, (_, i) =>
-    playing ? Math.min(VIZ_MAX, Math.max(0, (prev[i] ?? 0) + Math.round(rand() * 4) - 2)) : 0,
-  )
-}
-
-const DJ_PALETTE: Readonly<Record<string, number>> = { z: 0x000000, d: 0x7a3fa0, D: 0xa060c8, k: 0x1a1a1a }
+const DJ_PALETTE: Readonly<Record<string, number>> = { z: 0xb8c2cc, d: 0x7a3fa0, D: 0xa060c8, k: 0x1a1a1a }
 const DJ_UP = ['..zzzzzz..', '.z......z.', 'zz.dddd.zz', 'zzdddddDzz', '.ddkddkdd.', '.dddddddd.', '.ddDkkDdd.', '.dddddddd.', '..dddddd..', '..k....k..']
 const DJ_SQUASH = ['..........', '..zzzzzz..', '.z......z.', 'zzddddddzz', 'zddkddkddz', 'dddddddddd', '.ddDkkDdd.', '.dddddddd.', '.dddddddd.', '.k......k.']
 const withRows = (base: readonly string[], changes: Readonly<Record<number, string>>) => base.map((row, i) => changes[i] ?? row)
@@ -87,16 +105,16 @@ const DJ: Readonly<Record<'dance' | 'sway' | 'doze', readonly (readonly string[]
   doze: [withRows(DJ_UP, { 4: '.dkkddkkd.' }), withRows(DJ_UP, { 1: '.z......zk', 4: '.dkkddkkd.' })],
 }
 
-function paletteGrid(rows: readonly string[], palette: Readonly<Record<string, number>>) {
-  const g = newGrid(rows[0]?.length ?? 0, rows.length, TRANSPARENT)
-  rows.forEach((row, y) => [...row].forEach((ch, x) => (g.px[y * g.w + x] = palette[ch] ?? TRANSPARENT)))
+function paletteGrid(rows: readonly string[], palette: Readonly<Record<string, number>>, bg: number) {
+  const g = newGrid(rows[0]?.length ?? 0, rows.length, bg)
+  rows.forEach((row, y) => [...row].forEach((ch, x) => (g.px[y * g.w + x] = palette[ch] ?? bg)))
   return g
 }
 
-/** The DJ blob, 10x10 px: dancing while music plays, swaying when paused, dozing otherwise. */
-export function djCells(mode: 'dance' | 'sway' | 'doze', tick: number): string {
+/** The DJ blob, 10x10 px on `bg` (0xRRGGBB): dancing while music plays, swaying when paused, dozing otherwise. */
+export function djCells(mode: 'dance' | 'sway' | 'doze', tick: number, bg: number = TRANSPARENT): string {
   const frames = DJ[mode]
-  return gridToCells(paletteGrid(frames[tick % frames.length] ?? frames[0] ?? [], DJ_PALETTE))
+  return gridToCells(paletteGrid(frames[tick % frames.length] ?? frames[0] ?? [], DJ_PALETTE, bg))
 }
 
 // ── Timeline film strip ──────────────────────────────────────────────────
@@ -116,7 +134,6 @@ export function clipColor(frame: Keyframe): string {
   return CLIP_COLORS[frame.pose] ?? CLIP_COLORS.coding ?? '#D97757'
 }
 
-const rgb = (hexColor: string) => parseInt(hexColor.slice(1), 16)
 
 /** The film strip as a plain two-row Raster: what the Timeline draws when its Client is not available. */
 export function filmstripCells(
@@ -131,8 +148,8 @@ export function filmstripCells(
     const clip = i >= 0 ? clips[i] : undefined
     const onClip = clip !== undefined && (x - 1) % 2 === 0
     const isPlayhead = clip !== undefined && clip.n === current && !onClip
-    const film = rgb(isPlayhead ? colors.playhead : x % 3 === 1 ? colors.hole : colors.film)
-    const middle = rgb(isPlayhead ? colors.playhead : onClip ? clip.color : colors.gap)
+    const film = hex(isPlayhead ? colors.playhead : x % 3 === 1 ? colors.hole : colors.film)
+    const middle = hex(isPlayhead ? colors.playhead : onClip ? clip.color : colors.gap)
     words.set([0x2580, film, middle], x * 3)
     words.set([0x2580, middle, film], (width + x) * 3)
   }

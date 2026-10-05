@@ -85,3 +85,9 @@ test('a transient media-session error does not end the watch loop', () => {
   expect(loop).toContain('} catch {')
   expect(loop.indexOf('try {')).toBeLessThan(loop.indexOf('GetCurrentSession'))
 })
+
+test('the watch script reports the timeline, deduped without the live position', () => {
+  expect(WATCH_SCRIPT).toContain('GetTimelineProperties()')
+  expect(WATCH_SCRIPT).toContain('LastUpdatedTime')
+  expect(WATCH_SCRIPT).toMatch(/\$key -ne \$last/)
+})

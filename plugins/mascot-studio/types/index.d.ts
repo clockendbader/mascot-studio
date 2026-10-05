@@ -25,10 +25,12 @@ export type UsageSnapshot = {
   toolCalls: number
 }
 export type Track = { app: string; title: string; artist: string }
+/** Where a track is, in seconds. */
+export type Progress = { position: number; duration: number }
 export type SoundStatus =
   | { kind: 'off' }
   | { kind: 'nothing' }
-  | { kind: 'playing' | 'paused'; track: Track }
+  | { kind: 'playing' | 'paused'; track: Track; progress?: Progress }
   | { kind: 'unavailable'; reason: 'missing-playerctl' | 'automation-denied' | 'unsupported-os' }
   | { kind: 'stopped' }
 export type SoundAction = 'play-pause' | 'next' | 'previous'

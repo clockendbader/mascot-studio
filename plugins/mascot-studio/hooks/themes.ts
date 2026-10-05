@@ -17,7 +17,7 @@ export type Theme = {
   hover: string
   film: { film: string; hole: string; gap: string; playhead: string }
   status: { bg: string; text: string }
-  music: { bg: string; text: string; soft: string; progress: string; track: string }
+  music: { bg: string; text: string; soft: string; progress: string; track: string; button: { fg: string; bg: string; hover: string } }
   dialog: { title: string; titleText: string; body: string; text: string }
   levels: { ok: string; warn: string; critical: string }
   graph: { bg: string; grid: string; line: string }
@@ -48,7 +48,7 @@ export const THEMES: Readonly<Record<ThemeName, Theme>> = {
     hover: '#FFF3C4',
     film: { film: '#2A2F36', hole: '#9AA6B2', gap: '#1A1D22', playhead: '#E81123' },
     status: { bg: '#D6E4F3', text: '#1E395B' },
-    music: { bg: '#16202B', text: '#FFFFFF', soft: '#BFD7F2', progress: '#3FA9F5', track: '#33414F' },
+    music: { bg: '#16202B', text: '#FFFFFF', soft: '#BFD7F2', progress: '#3FA9F5', track: '#33414F', button: { fg: '#FFFFFF', bg: '#2A3A4C', hover: '#3FA9F5' } },
     dialog: { title: '#B9D3F0', titleText: '#1E395B', body: '#FFFFFF', text: '#1E395B' },
     levels: { ok: '#3FA9F5', warn: '#FFB000', critical: '#E5484D' },
     graph: { bg: '#000000', grid: '#008040', line: '#00FF00' },
@@ -66,7 +66,7 @@ export const THEMES: Readonly<Record<ThemeName, Theme>> = {
     hover: '#E3EEFC',
     film: { film: '#C9C9C9', hole: '#ECECEC', gap: '#ECECEC', playhead: '#F5C400' },
     status: { bg: '#D0D0D0', text: '#505050' },
-    music: { bg: '#E6EBDA', text: '#2E2E2E', soft: '#5E6152', progress: '#4A4A4A', track: '#B9BEAA' },
+    music: { bg: '#E6EBDA', text: '#2E2E2E', soft: '#5E6152', progress: '#4A4A4A', track: '#B9BEAA', button: { fg: '#2E2E2E', bg: '#D5DBC6', hover: '#FFFFFF' } },
     dialog: { title: '#E2E2E2', titleText: '#4D4D4D', body: '#ECECEC', text: '#2E2E2E' },
     levels: { ok: '#3D8BE8', warn: '#F5A623', critical: '#E5484D' },
     graph: { bg: '#1E1E1E', grid: '#3A3A3A', line: '#3D8BE8' },
@@ -84,7 +84,7 @@ export const THEMES: Readonly<Record<ThemeName, Theme>> = {
     hover: '#FBD9C8',
     film: { film: '#2C2C2C', hole: '#77746E', gap: '#1C1C1C', playhead: '#F07746' },
     status: { bg: '#DFDBD2', text: '#3C3B37' },
-    music: { bg: '#3C3B37', text: '#FFFFFF', soft: '#DFDBD2', progress: '#F07746', track: '#5E5C57' },
+    music: { bg: '#3C3B37', text: '#FFFFFF', soft: '#DFDBD2', progress: '#F07746', track: '#5E5C57', button: { fg: '#FFFFFF', bg: '#5E5C57', hover: '#F07746' } },
     dialog: { title: '#3C3B37', titleText: '#DFDBD2', body: '#F2F1F0', text: '#3C3B37' },
     levels: { ok: '#4E9A06', warn: '#F57900', critical: '#CC0000' },
     graph: { bg: '#2C001E', grid: '#4A1B3F', line: '#F07746' },
