@@ -49,6 +49,8 @@ let now = 0
 let drawn: { model: AnimModel; mounted: Set<RasterKey> } | null = null
 /** Set while a startup pane that landed inline is being closed, so it closes and hints once. */
 let isClosingStartup = false
+/** Set while a tick's repaints are in flight. */
+let isAnimating = false
 
 const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
 const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
@@ -187,7 +189,14 @@ export const register: Register = (on, options) => {
       }
     }
     $.clock.every(TICK_MS, () => {
-      void animate().catch(() => undefined)
+      // a surface still taking the last frame skips this tick rather than stacking repaints
+      if (isAnimating) return
+      isAnimating = true
+      void animate()
+        .catch(() => undefined)
+        .finally(() => {
+          isAnimating = false
+        })
     })
     try {
       const figures: unknown = await $.session.usage()

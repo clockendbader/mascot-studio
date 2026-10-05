@@ -82,3 +82,11 @@ test('a denied repaint stops until the stage is drawn again', async ($, on) => {
   await clock.advance(166)
   expect(rec.blits.filter(blit => blit.key === 'stage').length).toBeGreaterThan(denied)
 })
+
+test('a slow repaint is not stacked up by later ticks', async ($, on) => {
+  const { rec, clock } = answerEngine(on, { blitGate: () => new Promise<void>(() => undefined) })
+  await startSession($)
+  await mountPane($)
+  await clock.advance(166 * 5)
+  expect(rec.blits).toHaveLength(1)
+})

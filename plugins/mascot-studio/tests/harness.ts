@@ -27,6 +27,8 @@ export type BootOptions = {
   now?: number
   surfaces?: string[]
   blitDeny?: (key: string) => string | undefined
+  /** Holds every repaint until this resolves, as a slow surface would. */
+  blitGate?: () => Promise<void>
   /** Answers a tool call in place of the default `{ result: 'ok', text: 'ok' }`. */
   tool?: (e: { tool: string; tool_use_id?: string }) => unknown
 }
@@ -100,6 +102,7 @@ export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; c
   on('ui.blit', async (_$, e) => {
     const key = (e as { key: string }).key
     rec.blits.push({ key, cells: (e as { cells?: string }).cells ?? '' })
+    if (opts.blitGate !== undefined) await opts.blitGate()
     const deny = opts.blitDeny?.(key)
     return { value: deny === undefined ? {} : { deny } } as never
   })

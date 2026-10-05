@@ -78,3 +78,10 @@ test('control runs the encoded control script and reports success by exit code',
   exitCode = 1
   expect(await windowsBackend.control(fake.host, 'next')).toBe(false)
 })
+
+test('a transient media-session error does not end the watch loop', () => {
+  const loop = WATCH_SCRIPT.slice(WATCH_SCRIPT.indexOf('while ($true) {'))
+  expect(loop).toContain('try {')
+  expect(loop).toContain('} catch {')
+  expect(loop.indexOf('try {')).toBeLessThan(loop.indexOf('GetCurrentSession'))
+})
