@@ -24,6 +24,7 @@ import { detectOs } from './sound/platform'
 import type { Os } from './sound/platform'
 import type { Piece, SoundBackend, SoundHost } from './sound/types'
 import { windowsBackend } from './sound/windows'
+import { dialogView, dialogWidth, okSegments } from './views/dialogs'
 import { studioView } from './views/studio'
 import { timelineControls, timelineTabView } from './views/timelineTab'
 
@@ -65,9 +66,9 @@ const TAB_NAMES: Readonly<Record<string, Tab>> = { timeline: 'timeline', usage: 
 /** Empty film kept to the right of the playhead, in clips. */
 const PLAYHEAD_MARGIN = 8
 
-const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
-const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
-const paneTitle = () => `Mascot Studio MX · ${folder}.fla`
+const TERMINAL_ONLY = 'Clawd Studio runs in the terminal for now.'
+const STARTUP_HINT = 'Clawd Studio: type /studio to open it.'
+const paneTitle = () => `Clawd Studio · ${folder}`
 const HISTORY_MAX = 120
 /** The status line as last set, so it is only set again when it changes. */
 let lastStatus: string | undefined
@@ -204,7 +205,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
-    await $.command.register({ name: 'studio', description: 'Open or close Mascot Studio' })
+    await $.command.register({ name: 'studio', description: 'Open or close Clawd Studio' })
     if ((await read($, visitors)) === null) {
       const stored = await $.store.get('visitors').catch(() => 0)
       const total = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0
@@ -306,11 +307,11 @@ export const register: Register = (on, options) => {
     }
     if (isOpen) {
       await $.ui.close({ id: PANE })
-      return { text: 'Mascot Studio closed.' }
+      return { text: 'Clawd Studio closed.' }
     }
     await update($, opener, () => 'person' as Opener)
     await $.ui.open({ id: PANE, title: paneTitle() })
-    return { text: 'Mascot Studio opened.' }
+    return { text: 'Clawd Studio opened.' }
   })
 
   on('tool.call', async ($, e, next) => {
@@ -443,6 +444,7 @@ export const register: Register = (on, options) => {
       if (message !== null && 'pick' in message) await step($, { pick: message.pick })
       if (click === 'prev' || click === 'next' || click === 'live') await step($, click)
       if (click === 'details') await update($, usageDetails, shown => !shown)
+      if (click === 'ok') await setDialog($, null)
       const control = click === null ? undefined : MUSIC_CONTROLS[click]
       if (control !== undefined) {
         const done = await runMusic($, control, hasSound)
@@ -608,6 +610,7 @@ export const register: Register = (on, options) => {
       timeline,
       usage: usageTree,
       music: musicTree,
+      dialog: dialogView(els, shownDialog, cols, theme, shownDialog?.kind === 'error' ? row('ok', okSegments(theme, cols), dialogWidth(cols) - 2) : null),
       title: row('title', titleSegments(theme, cols)),
       tabs: row('tabs', tabSegments(theme, cols, shownTab)),
       status: row('status', statusSegments(theme, cols, {
@@ -624,17 +627,8 @@ export const register: Register = (on, options) => {
         layout,
         theme,
         tab: shownTab,
-        keyframes: frames,
-        dialog: shownDialog,
-        screensaver: isSaving,
-        current,
-        selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
-        activity: act,
-        elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
-        visitors: visitorCount,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
       },
-      { dismissDialog: () => void setDialog($, null) },
       parts,
     )
   })

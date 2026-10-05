@@ -1,9 +1,12 @@
 import { test, expect, describe } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import { QUESTION_TEXT, needsYouText } from '../hooks/alerts'
+import type { RowSegment } from '../hooks/client/row'
+import { THEMES } from '../hooks/themes'
+import type { ThemeName } from '../types'
 import { answerEngine, completeTurn, measure, mountPane, startSession, startTurn, waitFor } from './harness'
 
-const WAITING = 'ᓚᘏᗢ Mascot is waiting on you'
+const WAITING = 'Clawd is waiting on you'
 const ENOENT = { result: null, text: 'ENOENT: no such file\n at x', isError: true }
 
 async function view($: Engine) {
@@ -36,17 +39,38 @@ describe('error dialog', () => {
     const v = await view($)
     expect(v.pose).toMatch(/Clawd is oops/)
     expect(v.dialog).toBeDefined()
-    expect(await v.ui.find({ type: 'Text', text: 'Mascot Programming' })).toBeDefined()
+    expect(await v.ui.find({ type: 'Text', text: /Mascot Programming/ })).toBeDefined()
     expect(await v.ui.find({ type: 'Text', text: /✖.*Read failed: ENOENT: no such file/ })).toBeDefined()
   })
 
-  test('OK closes it', async ($, on) => {
+  test('clicking OK closes it', async ($, on) => {
     const { clock } = answerEngine(on, { tool: () => ENOENT })
     await failed($, clock)
     const v = await view($)
-    await v.ui.press({ key: 'ok' })
+    const node = await v.ui.find({ key: 'ok' })
+    const segments = (node?.props as { props?: { segments?: RowSegment[] } } | undefined)?.props?.segments ?? []
+    const at = segments.findIndex(s => s.id === 'ok')
+    expect(at).toBeGreaterThanOrEqual(0)
+    const x = segments.slice(0, at).reduce((sum, s) => sum + [...s.text].length, 0)
+    await v.ui.pointer({ type: 'down', x, y: 0, button: 'left', in: 'ok' })
+    await waitFor(clock, () => false)
+    await v.ui.redraw()
     expect(await v.ui.find({ key: 'dialog' })).toBeUndefined()
   })
+
+  for (const name of ['windows7', 'macos', 'ubuntu'] as ThemeName[]) {
+    test(`it is drawn in the ${name} theme`, { options: { theme: name } }, async ($, on) => {
+      const theme = THEMES[name]
+      const { clock } = answerEngine(on, { tool: () => ENOENT })
+      await failed($, clock)
+      const v = await view($)
+      const box = v.dialog?.props as { top?: number; backgroundColor?: string; borderColor?: string } | undefined
+      expect(box?.top).toBe(name === 'macos' ? 0 : 3)
+      expect(box?.backgroundColor).toBe(theme.dialog.body)
+      expect((await v.ui.find({ type: 'Text', text: /Mascot Programming/ }))?.props).toMatchObject({ color: theme.dialog.titleText, backgroundColor: theme.dialog.title })
+      expect((await v.ui.find({ type: 'Text', text: /Read failed/ }))?.props).toMatchObject({ color: theme.dialog.text })
+    })
+  }
 
   test('the next tool call closes it', async ($, on) => {
     let fail = true
@@ -86,7 +110,7 @@ describe('needs you', () => {
     expect(rec.statuses.at(-1)).toBe(WAITING)
     await $.tool.call({ tool: 'Bash', tool_use_id: 'u1', command: 'npm test' } as never)
     expect((await view($)).dialog).toBeUndefined()
-    expect(rec.statuses.at(-1)).toBe('ᓚᘏᗢ context 84% · consider /compact')
+    expect(rec.statuses.at(-1)).toBe('Clawd: context 84% · consider /compact')
   })
 
   test('a finished turn clears it', async ($, on) => {

@@ -45,22 +45,22 @@ test('costLabel says Est. on a plan and plain Cost on an API key', () => {
 
 describe('usageWarning', () => {
   test('warns about context', () => {
-    expect(usageWarning(snap({ contextPercent: 84 }), now)).toBe('ᓚᘏᗢ context 84% · consider /compact')
+    expect(usageWarning(snap({ contextPercent: 84 }), now)).toBe('Clawd: context 84% · consider /compact')
   })
 
   test('warns about the 5-hour limit with its reset', () => {
     const s = snap({ rateLimits: [{ kind: 'five_hour', percentUsed: 82, resetsAt: at(5, 16, 10) }] })
-    expect(usageWarning(s, now)).toBe('ᓚᘏᗢ 5-hour limit 82% · resets 4:10 PM')
+    expect(usageWarning(s, now)).toBe('Clawd: 5-hour limit 82% · resets 4:10 PM')
   })
 
   test('warns about the weekly limit', () => {
     const s = snap({ rateLimits: [{ kind: 'seven_day', percentUsed: 90, resetsAt: at(12, 9) }] })
-    expect(usageWarning(s, now)).toBe('ᓚᘏᗢ weekly limit 90% · resets Mon 9:00 AM')
+    expect(usageWarning(s, now)).toBe('Clawd: weekly limit 90% · resets Mon 9:00 AM')
   })
 
   test('the highest figure wins', () => {
     const s = snap({ contextPercent: 84, rateLimits: [{ kind: 'five_hour', percentUsed: 91 }] })
-    expect(usageWarning(s, now)).toBe('ᓚᘏᗢ 5-hour limit 91%')
+    expect(usageWarning(s, now)).toBe('Clawd: 5-hour limit 91%')
   })
 
   test('stays quiet under 80', () => {
@@ -76,10 +76,10 @@ test('pushHistory keeps the newest samples and skips missing ones', () => {
 })
 
 describe('statusLine', () => {
-  const warning = 'ᓚᘏᗢ context 84% · consider /compact'
+  const warning = 'Clawd: context 84% · consider /compact'
 
   test('waiting on the person outranks a usage warning', () => {
-    expect(statusLine({ kind: 'needs-you', text: 'x', at: 0 }, warning)).toBe('ᓚᘏᗢ Mascot is waiting on you')
+    expect(statusLine({ kind: 'needs-you', text: 'x', at: 0 }, warning)).toBe('Clawd is waiting on you')
   })
 
   test('an error dialog leaves the usage warning showing', () => {

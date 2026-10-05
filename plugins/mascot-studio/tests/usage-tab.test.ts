@@ -82,7 +82,7 @@ test('crossing 80% warns on the status line and dropping back clears it', async 
   const { rec } = answerEngine(on)
   await startSession($)
   await measure($, { percent: 84 })
-  expect(rec.statuses.at(-1)).toBe('ᓚᘏᗢ context 84% · consider /compact')
+  expect(rec.statuses.at(-1)).toBe('Clawd: context 84% · consider /compact')
   await measure($, { percent: 40 })
   expect(rec.statuses.at(-1)).toBeUndefined()
 })

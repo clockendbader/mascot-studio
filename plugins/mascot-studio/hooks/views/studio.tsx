@@ -1,40 +1,25 @@
 import type { Elements } from 'claude-code'
 
-import type { Elements as AllElements } from 'claude-code'
-
-import type { Activity, Dialog, Keyframe, Tab } from '../../types'
+import type { Tab } from '../../types'
 import type { RasterFrame } from '../animator'
 import type { LayoutV2 } from '../layout'
 import type { Theme } from '../themes'
 import { chromeCells } from './chrome'
-import { dialogView } from './dialogs'
 
 type Els = Elements['terminal']
 
-type Tree = ReturnType<AllElements['terminal']['Box']>
+type Tree = ReturnType<Els['Box']>
 
 export type StudioVM = {
   cols: number
   layout: LayoutV2
   theme: Theme
   tab: Tab
-  keyframes: readonly Keyframe[]
-  current: number
-  selected: Keyframe | null
-  activity: Activity
-  elapsed: string
-  visitors: number | null
   frames: Readonly<Partial<Record<string, RasterFrame>>>
-  dialog: Dialog
-  screensaver: boolean
 }
 
-/** The clickable rows, built by the hooks module (Client rows, or plain Text after a fault). */
-export type StudioParts = { title: Tree; tabs: Tree; status: Tree; timeline: Tree | null; usage: Tree | null; music: Tree | null }
-
-export type StudioActions = {
-  dismissDialog(): void
-}
+/** The pieces the hooks module builds: the clickable rows (Client rows, or plain Text after a fault), each tab's content and the dialog. */
+export type StudioParts = { title: Tree; tabs: Tree; status: Tree; timeline: Tree | null; usage: Tree | null; music: Tree | null; dialog: Tree | null }
 
 
 function rasterOf(els: Els, frame: RasterFrame | undefined) {
@@ -49,7 +34,7 @@ function tabContent(vm: StudioVM, parts: StudioParts) {
 }
 
 /** The whole pane: title chrome, tabs, the Stage, the active tab and the status bar. */
-export function studioView(els: Els, vm: StudioVM, act: StudioActions, parts: StudioParts) {
+export function studioView(els: Els, vm: StudioVM, parts: StudioParts) {
   const { Box, Text, Raster } = els
   const { cols, layout, theme } = vm
   if (layout.tooNarrow) {
@@ -70,7 +55,7 @@ export function studioView(els: Els, vm: StudioVM, act: StudioActions, parts: St
           {' '}
         </Text>
         {rasterOf(els, vm.frames.stage)}
-        {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
+        {parts.dialog}
       </Box>
       <Box key="tab-content" flexDirection="column" height={layout.content} backgroundColor={theme.body}>
         {tabContent(vm, parts)}

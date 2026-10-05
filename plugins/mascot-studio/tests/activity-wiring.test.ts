@@ -1,5 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
+import { stageCells } from '../hooks/art/stage'
+import { THEMES } from '../hooks/themes'
 import { answerEngine, completeTurn, mountPane, startSession, startTurn, waitFor } from './harness'
 
 async function view($: Engine) {
@@ -89,4 +91,22 @@ test('parallel calls keep the newest pose until all have settled', async ($, on)
   pending.get('p2')?.()
   await p2
   expect((await view($)).pose).toMatch(/Clawd is thinking/)
+})
+
+test('a quiet minute after a turn puts Clawd to sleep, without a redraw', async ($, on) => {
+  const { rec, clock } = answerEngine(on, { now: new Date(2026, 6, 4, 12).getTime(), os: 'windows' })
+  await startSession($)
+  await startTurn($)
+  await completeTurn($)
+  await clock.advance(1000)
+  await waitFor(clock, () => false)
+  await mountPane($, 46, 30)
+  const backdrop = THEMES.windows7.backdrop
+  const frames = (pose: 'idle' | 'asleep') =>
+    new Set(Array.from({ length: 64 }, (_, tick) => stageCells({ cols: 44, pose, hat: 'none', tick, backdrop })))
+  const lastStage = () => rec.blits.filter(blit => blit.key === 'stage').at(-1)?.cells ?? ''
+  await clock.advance(166 * 3)
+  expect(frames('idle').has(lastStage())).toBe(true)
+  await clock.advance(61_000)
+  expect(frames('asleep').has(lastStage())).toBe(true)
 })

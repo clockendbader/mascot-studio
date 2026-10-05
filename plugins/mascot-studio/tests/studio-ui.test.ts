@@ -83,3 +83,30 @@ test('a slow repaint is not stacked up by later ticks', async ($, on) => {
   await clock.advance(166 * 5)
   expect(rec.blits).toHaveLength(1)
 })
+
+for (const theme of ['windows7', 'macos', 'ubuntu']) {
+  test(`${theme}: every text in every tab sets its colour and nothing is a plain Button`, { options: { theme } }, async ($, on) => {
+    answerEngine(on, { tool: e => (e.tool === 'Bash' ? { result: null, text: 'exit 1', isError: true } : { result: 'ok', text: 'ok' }) })
+    await threeCalls($)
+    for (const tab of ['timeline', 'usage', 'music']) {
+      await $.command.run({ command: 'studio', args: tab } as never)
+      const ui = await mountPane($, 46, 30)
+      expect(await ui.find({ key: 'dialog' })).toBeDefined()
+      expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+      let texts = 0
+      const walk = (n: unknown): void => {
+        if (typeof n !== 'object' || n === null) return
+        const node = n as { type?: string; props?: { color?: string }; children?: unknown[] }
+        if (node.type === 'Text') {
+          texts += 1
+          expect(node.props?.color).toBeDefined()
+        }
+        for (const child of node.children ?? []) walk(child)
+      }
+      walk(await ui.find({ key: 'stage-section' }))
+      walk(await ui.find({ key: 'tab-content' }))
+      expect(texts).toBeGreaterThan(2)
+      await ui.unmount()
+    }
+  })
+}

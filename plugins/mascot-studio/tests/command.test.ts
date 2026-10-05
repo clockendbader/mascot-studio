@@ -10,3 +10,9 @@ test('/studio opens the pane, and closes it when open', { options: { openOnStart
   expect(await $.command.run({ command: 'studio', args: '' } as never)).toMatchObject({ text: expect.stringContaining('closed') })
   expect(rec.closed).toEqual(['mascot-studio'])
 })
+
+test('the pane is titled Clawd Studio with the project folder', async ($, on) => {
+  const { rec } = answerEngine(on)
+  await startSession($)
+  expect(rec.titles).toEqual(['Clawd Studio · my-project'])
+})

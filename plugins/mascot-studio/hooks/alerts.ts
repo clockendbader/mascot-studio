@@ -1,6 +1,6 @@
 import type { Dialog } from '../types'
 
-export const WAITING = 'ᓚᘏᗢ Mascot is waiting on you'
+export const WAITING = 'Clawd is waiting on you'
 export const QUESTION_TEXT = 'MascotProgramming: hey! i have a question for you'
 const ASKING = 'MascotProgramming: hey! i need ur OK'
 

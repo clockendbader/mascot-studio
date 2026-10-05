@@ -3,7 +3,7 @@ import { formatReset } from './calendar'
 
 export const WARN_AT = 80
 export const CRITICAL_AT = 95
-const MASCOT = 'ᓚᘏᗢ'
+const MASCOT = 'Clawd:'
 
 export type Level = 'ok' | 'warn' | 'critical'
 
