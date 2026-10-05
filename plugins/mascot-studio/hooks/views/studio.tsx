@@ -1,9 +1,13 @@
 import type { Elements } from 'claude-code'
 
-import type { Activity, Dialog, Keyframe, Pose, Scene } from '../../types'
+import type { Elements as AllElements } from 'claude-code'
+
+import type { Activity, Dialog, Keyframe, Pose, Tab } from '../../types'
 import { truncateMiddle } from '../activity'
 import type { RasterFrame } from '../animator'
-import type { Layout } from '../layout'
+import type { LayoutV2 } from '../layout'
+import type { Theme } from '../themes'
+import { chromeCells } from './chrome'
 import { dialogView } from './dialogs'
 import { mascotAmpView } from './mascotAmp'
 import type { AmpActions, AmpVM } from './mascotAmp'
@@ -14,10 +18,13 @@ import type { TimelineActions } from './timeline'
 
 type Els = Elements['terminal']
 
+type Tree = ReturnType<AllElements['terminal']['Box']>
+
 export type StudioVM = {
   cols: number
-  layout: Layout
-  scene: Scene
+  layout: LayoutV2
+  theme: Theme
+  tab: Tab
   keyframes: readonly Keyframe[]
   soundFrames: readonly number[]
   current: number
@@ -32,13 +39,14 @@ export type StudioVM = {
   screensaver: boolean
 }
 
+/** The clickable rows, built by the hooks module (Client rows, or plain Text after a fault). */
+export type StudioParts = { title: Tree; tabs: Tree; status: Tree }
+
 export type StudioActions = TimelineActions &
   AmpActions & {
     live(): void
     dismissDialog(): void
   }
-
-const MENU = ' File  Edit  View  Insert  Modify  Control'
 
 export const POSE_WORDS: Readonly<Record<Pose, string>> = {
   thinking: 'thinking',
@@ -64,11 +72,6 @@ function outcome(frame: Keyframe): string {
   return `${frame.isError === true ? '✖' : '✓'} ${duration(frame)}${frame.errorLine ? ` ${frame.errorLine}` : ''}`
 }
 
-function separator(els: Els, name: string, cols: number) {
-  const { Text } = els
-  return <Text dimColor wrap="truncate-end">{`┄ ${name} `.padEnd(cols, '┄')}</Text>
-}
-
 function rasterOf(els: Els, frame: RasterFrame | undefined) {
   const { Raster } = els
   return frame === undefined ? null : <Raster key={frame.key} columns={frame.columns} rows={frame.rows} cells={frame.cells} />
@@ -77,7 +80,7 @@ function rasterOf(els: Els, frame: RasterFrame | undefined) {
 function propertiesView(els: Els, vm: StudioVM, act: StudioActions) {
   const { Box, Text, Button } = els
   const { cols, activity, selected } = vm
-  const isLine = vm.layout.props === 'line'
+  const isLine = false
 
   if (selected !== null) {
     const summary = `Frame ${selected.n} · ${selected.tool} · ${outcome(selected)}`
@@ -114,46 +117,49 @@ function propertiesView(els: Els, vm: StudioVM, act: StudioActions) {
   )
 }
 
-/** The whole pane: menu bar, timeline, stage (or Scene 2) and Properties. */
-export function studioView(els: Els, vm: StudioVM, act: StudioActions) {
+function tabContent(els: Els, vm: StudioVM, act: StudioActions) {
   const { Box, Text } = els
-  const { cols, layout } = vm
-  if (layout.tooNarrow) return <Text>Widen the pane to see the studio.</Text>
+  if (vm.tab === 'usage') return vm.tm === undefined ? null : taskManagerView(els, vm.tm, vm.frames)
+  if (vm.tab === 'music') {
+    if (vm.amp === undefined) return <Text color={vm.theme.ink}>Music is off. Turn it on in /config.</Text>
+    return mascotAmpView(els, vm.amp, vm.frames, act)
+  }
+  return (
+    <Box flexDirection="column">
+      {timelineView(els, vm, act)}
+      {propertiesView(els, vm, act)}
+    </Box>
+  )
+}
+
+/** The whole pane: title chrome, tabs, the Stage, the active tab and the status bar. */
+export function studioView(els: Els, vm: StudioVM, act: StudioActions, parts: StudioParts) {
+  const { Box, Text, Raster } = els
+  const { cols, layout, theme } = vm
+  if (layout.tooNarrow) {
+    return (
+      <Box backgroundColor={theme.body}>
+        <Text color={theme.ink}>Widen the pane to see the studio.</Text>
+      </Box>
+    )
+  }
 
   return (
-    <Box flexDirection="column" width={cols}>
-      {layout.menu ? (
-        <Box key="menu-bar">
-          <Text dimColor wrap="truncate-end">{MENU}</Text>
-        </Box>
-      ) : null}
-      <Box key="timeline-section" flexDirection="column">
-        {separator(els, 'Timeline', cols)}
-        {timelineView(els, vm, act)}
+    <Box flexDirection="column" width={cols} backgroundColor={theme.body}>
+      <Raster key="chrome" columns={cols} rows={1} cells={chromeCells(theme, cols)} />
+      {parts.title}
+      {parts.tabs}
+      <Box key="stage-section" flexDirection="row" backgroundColor={theme.body}>
+        <Text color={theme.body} backgroundColor={theme.body}>
+          {' '}
+        </Text>
+        {rasterOf(els, vm.frames.stage)}
+        {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
       </Box>
-      {vm.scene === 1 || vm.screensaver ? (
-        <Box key="stage-section" flexDirection="column">
-          {separator(els, 'Stage', cols)}
-          {rasterOf(els, vm.frames.stage)}
-          {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
-        </Box>
-      ) : (
-        <Box key="stage-section" flexDirection="column">
-          {separator(els, 'Stage · Scene 2: Task Manager', cols)}
-          {vm.tm === undefined ? null : taskManagerView(els, vm.tm, vm.frames)}
-          {dialogView(els, vm.dialog, cols, () => act.dismissDialog())}
-        </Box>
-      )}
-      <Box key="properties-section" flexDirection="column">
-        {separator(els, 'Properties', cols)}
-        {propertiesView(els, vm, act)}
+      <Box key="tab-content" flexDirection="column" height={layout.content} backgroundColor={theme.body}>
+        {tabContent(els, vm, act)}
       </Box>
-      {vm.amp === undefined || layout.amp === 'none' ? null : (
-        <Box key="amp-section" flexDirection="column">
-          {layout.amp === 'full' ? separator(els, 'MascotAmp', cols) : null}
-          {mascotAmpView(els, vm.amp, vm.frames, act)}
-        </Box>
-      )}
+      {parts.status}
     </Box>
   )
 }

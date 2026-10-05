@@ -19,10 +19,11 @@ async function scene2($: Engine, clock: MockClock, cols = 46, rows = 30) {
   await $.tool.call({ tool: 'Read', tool_use_id: 'u1', file_path: '/a' } as never)
   await completeTurn($)
   await clock.advance(1500)
+  await $.command.run({ command: 'studio', args: 'usage' } as never)
   return mountPane($, cols, rows)
 }
 
-test('Scene 2 shows the usage figures on a plan', async ($, on) => {
+test('the Usage tab shows the figures on a plan', async ($, on) => {
   const { clock } = answerEngine(on, { usage: PLAN })
   const ui = await scene2($, clock)
   expect(await ui.find({ type: 'Text', text: '42 %' })).toBeDefined()
@@ -36,7 +37,7 @@ test('Scene 2 shows the usage figures on a plan', async ($, on) => {
   for (const key of ['tm-title', 'ctx-meter', 'ctx-graph']) expect(await ui.find({ key })).toBeDefined()
 })
 
-test('Scene 2 on an API key says there are no plan limits', async ($, on) => {
+test('the Usage tab on an API key says there are no plan limits', async ($, on) => {
   const { clock } = answerEngine(on, { usage: { ...PLAN, rateLimits: [] } })
   const ui = await scene2($, clock)
   expect(await ui.find({ type: 'Text', text: 'No plan limits (API key)' })).toBeDefined()
@@ -68,13 +69,6 @@ test('a refused startup read leaves the studio working until a measure arrives',
   expect(await ui.find({ type: 'Text', text: '42 %' })).toBeDefined()
 })
 
-test('a short pane folds the Limits and Totals boxes but keeps the status line', async ($, on) => {
-  const { clock } = answerEngine(on, { usage: PLAN })
-  const ui = await scene2($, clock, 46, 22)
-  expect(await ui.find({ type: 'Text', text: /Limits/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Totals/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Tools: 1/ })).toBeDefined()
-})
 
 test('the history graph gains a sample per finished turn', async ($, on) => {
   const { clock } = answerEngine(on, { usage: PLAN })
@@ -84,6 +78,7 @@ test('the history graph gains a sample per finished turn', async ($, on) => {
     await completeTurn($, id)
   }
   await clock.advance(1500)
+  await $.command.run({ command: 'studio', args: 'usage' } as never)
   const first = await mountPane($)
   const graph = (await first.find({ key: 'ctx-graph' }))?.props as { cells: string } | undefined
   expect(graph?.cells).toBeDefined()

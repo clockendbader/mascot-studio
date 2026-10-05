@@ -15,7 +15,7 @@ export type Keyframe = {
 }
 export type MiniMood = 'relaxed' | 'squint' | 'sweat' | 'flat' | 'asleep'
 export type Activity = { pose: Pose; tool?: string; target?: string; since: number }
-export type Scene = 1 | 2
+export type Tab = 'timeline' | 'usage' | 'music'
 export type RateLimitView = { kind: string; percentUsed: number; resetsAt?: string }
 export type UsageSnapshot = {
   contextPercent?: number
@@ -44,7 +44,8 @@ declare module 'claude-code' {
       activity: Activity
       keyframes: Keyframe[]
       selectedFrame: number | null
-      scene: Scene
+      tab: Tab
+      themeOverride: ThemeName | null
       turnStartedAt: number | null
       idleSince: number | null
       turns: number

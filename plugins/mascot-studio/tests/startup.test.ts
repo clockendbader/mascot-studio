@@ -45,5 +45,5 @@ test('a pane the person opened stays inline', { options: { openOnStartup: false 
   const ui = await mountPane($, 46, 30, 'inline')
   await clock.advance(0)
   expect(rec.closed).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /Timeline/ })).toBeDefined()
+  expect(await ui.find({ key: 'tabs' })).toBeDefined()
 })

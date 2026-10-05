@@ -71,5 +71,5 @@ test('screensaverMinutes 0 never starts it', { options: { screensaverMinutes: 0 
   await completeTurn($)
   await clock.advance(600_000)
   const ui = await mountPane($, 46, 32)
-  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  expect(hasWorkArea(((await ui.find({ key: 'stage' }))?.props as { cells: string } | undefined)?.cells)).toBe(true)
 })

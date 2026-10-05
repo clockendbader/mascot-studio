@@ -40,7 +40,7 @@ test('a failed call shows its keyframe as ✖ with its first error line', async 
   expect(await v.ui.find({ type: 'Text', text: /✖.*boom/ })).toBeDefined()
 })
 
-test('a finished turn hops, then switches to Scene 2 idle', async ($, on) => {
+test('a finished turn hops, then rests idle at the laptop', async ($, on) => {
   const { clock } = answerEngine(on)
   await startSession($)
   await startTurn($)
@@ -52,7 +52,7 @@ test('a finished turn hops, then switches to Scene 2 idle', async ($, on) => {
   await clock.advance(1500)
   const later = await view($)
   expect(later.pose).toMatch(/Pose\s+idle/)
-  expect(later.isStudio).toBe(false)
+  expect(later.isStudio).toBe(true)
 })
 
 test('a subagent finishing changes nothing', async ($, on) => {

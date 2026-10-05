@@ -1,41 +1,16 @@
-import type { Scene } from '../types'
-
-export type Layout = {
-  tooNarrow: boolean
-  menu: boolean
-  props: 'full' | 'line'
-  amp: 'full' | 'line' | 'none'
-  tmBoxes: boolean
-}
-
 export const MIN_COLS = 32
 
-const HEIGHT = {
-  menu: 1,
-  timeline: 5,
-  stage: { 1: 13, 2: 16 },
-  tmBoxes: 5,
-  props: { full: 3, line: 2 },
-  amp: { full: 6, line: 1, none: 0 },
-} as const
+export type LayoutV2 = { tooNarrow: boolean; content: number; stageCols: number }
 
-function heightOf(l: Layout, scene: Scene): number {
-  return (
-    (l.menu ? HEIGHT.menu : 0) +
-    HEIGHT.timeline +
-    HEIGHT.stage[scene] -
-    (scene === 2 && !l.tmBoxes ? HEIGHT.tmBoxes : 0) +
-    HEIGHT.props[l.props] +
-    HEIGHT.amp[l.amp]
-  )
-}
+const FIXED_ROWS = 16 // title chrome 2, tabs 1, Stage 12, status 1
+const CONTENT_MIN = 4
+const CONTENT_MAX = 8
 
-/** Which sections fit, folding the sound panel, then the menu bar, then Properties, then Scene 2's boxes. */
-export function layoutFor(cols: number, rows: number, scene: Scene, amp: boolean): Layout {
-  const l: Layout = { tooNarrow: cols < MIN_COLS, menu: true, props: 'full', amp: amp ? 'full' : 'none', tmBoxes: true }
-  if (heightOf(l, scene) > rows && l.amp === 'full') l.amp = 'line'
-  if (heightOf(l, scene) > rows) l.menu = false
-  if (heightOf(l, scene) > rows) l.props = 'line'
-  if (scene === 2 && heightOf(l, scene) > rows) l.tmBoxes = false
-  return l
+/** Title, tabs, Stage and status are fixed; the tab content takes what is left, 4 to 8 rows. */
+export function layoutV2(cols: number, rows: number): LayoutV2 {
+  return {
+    tooNarrow: cols < MIN_COLS,
+    content: Math.max(CONTENT_MIN, Math.min(CONTENT_MAX, rows - FIXED_ROWS)),
+    stageCols: cols - 2,
+  }
 }

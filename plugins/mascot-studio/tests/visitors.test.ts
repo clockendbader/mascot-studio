@@ -55,11 +55,11 @@ async function stageOn($: Engine) {
 test('October puts the pumpkin on the mascot', async ($, on) => {
   answerEngine(on, { now: new Date(2026, 9, 5, 12).getTime(), os: 'windows' })
   await startSession($)
-  expect(await stageOn($)).toBe(stageCells({ cols: 46, pose: 'idle', hat: 'pumpkin', tick: 0, backdrop: THEMES.windows7.backdrop }))
+  expect(await stageOn($)).toBe(stageCells({ cols: 44, pose: 'idle', hat: 'pumpkin', tick: 0, backdrop: THEMES.windows7.backdrop }))
 })
 
 test('an ordinary day has no hat', async ($, on) => {
   answerEngine(on, { now: new Date(2026, 6, 4, 12).getTime(), os: 'windows' })
   await startSession($)
-  expect(await stageOn($)).toBe(stageCells({ cols: 46, pose: 'idle', hat: 'none', tick: 0, backdrop: THEMES.windows7.backdrop }))
+  expect(await stageOn($)).toBe(stageCells({ cols: 44, pose: 'idle', hat: 'none', tick: 0, backdrop: THEMES.windows7.backdrop }))
 })

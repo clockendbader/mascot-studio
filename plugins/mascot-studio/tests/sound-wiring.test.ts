@@ -35,6 +35,7 @@ async function playing($: Engine, clock: MockClock, feed: ReturnType<typeof play
   await settle(clock)
   feed.lines.push(SONG_1)
   await settle(clock)
+  await $.command.run({ command: 'studio', args: 'music' } as never)
 }
 
 test('a playing track shows in MascotAmp with its controls', async ($, on) => {
@@ -52,6 +53,7 @@ test('a new track adds a Sound-layer keyframe at the current frame', async ($, o
   await playing($, clock, feed)
   await $.tool.call({ tool: 'Read', tool_use_id: 'u1', file_path: '/a' } as never)
   await $.tool.call({ tool: 'Read', tool_use_id: 'u2', file_path: '/b' } as never)
+  await $.command.run({ command: 'studio', args: 'timeline' } as never)
   const before = await mountPane($, 46, 32)
   expect(await before.findAll({ type: 'Text', text: '●' })).toHaveLength(0)
   await before.unmount()
@@ -78,6 +80,7 @@ test('without playerctl the panel says how to connect', async ($, on) => {
   })
   await startSession($)
   await settle(clock)
+  await $.command.run({ command: 'studio', args: 'music' } as never)
   const ui = await mountPane($, 46, 32)
   expect(await ui.find({ type: 'Text', text: /Install playerctl to connect music/ })).toBeDefined()
 })
@@ -101,6 +104,7 @@ test('a helper that keeps failing offers a retry', async ($, on) => {
     await settle(clock)
   }
   expect(rec.spawns).toHaveLength(5)
+  await $.command.run({ command: 'studio', args: 'music' } as never)
   const ui = await mountPane($, 46, 32)
   expect(await ui.find({ key: 'retry' })).toBeDefined()
   await ui.press({ key: 'retry' })

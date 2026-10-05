@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { Keyframe, Scene } from '../../types'
+import type { Keyframe } from '../../types'
 import { layerCells, timelineWindow } from '../activity'
 
 type Els = Elements['terminal']
@@ -14,14 +14,12 @@ export type TimelineVM = {
   keyframes: readonly Keyframe[]
   soundFrames: readonly number[]
   current: number
-  scene: Scene
   elapsed: string
   visitors: number | null
 }
 
 export type TimelineActions = {
   selectFrame(n: number): void
-  toggleScene(): void
 }
 
 /** Frame numbers at 1 and every 5th frame, as far as each fits before the next. */
@@ -70,7 +68,6 @@ export function timelineView(els: Els, vm: TimelineVM, act: TimelineActions) {
     return <Text>{kind === 'key' ? '●' : '─'}</Text>
   })
 
-  const sceneLabel = `Scene ${vm.scene}`
   return (
     <Box flexDirection="column">
       {at >= 0 && at < width ? (
@@ -90,11 +87,7 @@ export function timelineView(els: Els, vm: TimelineVM, act: TimelineActions) {
         <Text>{' ♪ Sound  '}</Text>
         {soundRow}
       </Box>
-      <Box flexDirection="row">
-        <Text> </Text>
-        <Button key="scene" plain hotkey="t" label={sceneLabel} onPress={() => act.toggleScene()} />
-        <Text dimColor wrap="truncate-end">{footerText(vm, vm.cols - sceneLabel.length - 4)}</Text>
-      </Box>
+      <Text dimColor wrap="truncate-end">{footerText(vm, vm.cols - 2)}</Text>
     </Box>
   )
 }

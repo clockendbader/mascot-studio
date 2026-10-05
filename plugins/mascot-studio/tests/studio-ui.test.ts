@@ -23,7 +23,7 @@ for (const [cols, rows] of SIZES) {
       await threeCalls($)
       const ui = await mountPane($, cols, rows)
       expect(await ui.findAll({ type: 'Button', text: '●' })).toHaveLength(3)
-      expect((await ui.find({ key: 'stage' }))?.props).toMatchObject({ columns: cols, rows: 12 })
+      expect((await ui.find({ key: 'stage' }))?.props).toMatchObject({ columns: cols - 2, rows: 12 })
     })
 
     test('the inspector pins a keyframe and live returns', async ($, on) => {
@@ -38,16 +38,6 @@ for (const [cols, rows] of SIZES) {
       expect(await ui.find({ key: 'live' })).toBeUndefined()
     })
 
-    test('the scene switcher swaps the stage for Task Manager', async ($, on) => {
-      answerEngine(on)
-      await threeCalls($)
-      const ui = await mountPane($, cols, rows)
-      await ui.press({ key: 'scene' })
-      expect(await ui.find({ key: 'stage' })).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: 'Task Manager' })).toBeDefined()
-      await ui.press({ key: 'scene' })
-      expect(await ui.find({ key: 'stage' })).toBeDefined()
-    })
   })
 }
 

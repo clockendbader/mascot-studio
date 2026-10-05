@@ -1,15 +1,17 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, Dialog, Keyframe, Opener, Scene, SoundAction, SoundStatus, UsageSnapshot } from '../types'
+import type { Activity, Dialog, Keyframe, Opener, SoundAction, SoundStatus, Tab, ThemeName, UsageSnapshot } from '../types'
 import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
 import { nextHeights } from './art/instruments'
 import { TICK_MS, rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
 import { QUESTION_TEXT, needsYouText, notifiedText, statusLine } from './alerts'
-import { layoutFor } from './layout'
-import { themeFor } from './themes'
+import { layoutV2 } from './layout'
+import { THEMES, themeFor } from './themes'
+import { segmentsText, statusSegments, tabSegments, titleSegments } from './views/chrome'
+import type { RowSegment } from './client/row'
 import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
 import { taskManagerSizes } from './views/taskManager'
@@ -30,7 +32,8 @@ const opener = atom({ plugin: 'mascot-studio', key: 'opener' } as const, null as
 const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { pose: 'idle', since: 0 } as Activity)
 const keyframes = atom({ plugin: 'mascot-studio', key: 'keyframes' } as const, [] as Keyframe[])
 const selectedFrame = atom({ plugin: 'mascot-studio', key: 'selectedFrame' } as const, null as number | null)
-const scene = atom({ plugin: 'mascot-studio', key: 'scene' } as const, 1 as Scene)
+const tab = atom({ plugin: 'mascot-studio', key: 'tab' } as const, 'timeline' as Tab)
+const themeOverride = atom({ plugin: 'mascot-studio', key: 'themeOverride' } as const, null as ThemeName | null)
 const turnStartedAt = atom({ plugin: 'mascot-studio', key: 'turnStartedAt' } as const, null as number | null)
 const idleSince = atom({ plugin: 'mascot-studio', key: 'idleSince' } as const, null as number | null)
 const turns = atom({ plugin: 'mascot-studio', key: 'turns' } as const, 0)
@@ -53,6 +56,9 @@ let drawn: { model: AnimModel; mounted: Set<RasterKey> } | null = null
 let isClosingStartup = false
 /** Set while a tick's repaints are in flight. */
 let isAnimating = false
+/** Client rows that faulted on this surface: drawn as plain Text from then on. */
+const faulted = new Set<string>()
+const TAB_NAMES: Readonly<Record<string, Tab>> = { timeline: 'timeline', usage: 'usage', music: 'music' }
 
 const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
 const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
@@ -233,9 +239,28 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'studio' }, async $ => {
+  on('command.run', { command: 'studio' }, async ($, e) => {
     if (!(await $.session.surfaces()).includes('terminal')) return { text: TERMINAL_ONLY }
+    const [verb = '', arg = ''] = String((e as { args?: unknown }).args ?? '').trim().toLowerCase().split(/\s+/)
     const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
+    const shown = TAB_NAMES[verb]
+    if (shown !== undefined) {
+      await update($, tab, () => shown)
+      if (!isOpen) {
+        await update($, opener, () => 'person' as Opener)
+        await $.ui.open({ id: PANE, title: paneTitle() })
+      }
+      return { text: `Showing ${shown[0]?.toUpperCase()}${shown.slice(1)}.` }
+    }
+    if (verb === 'theme') {
+      const chosen = (THEMES as Readonly<Record<string, (typeof THEMES)[ThemeName] | undefined>>)[arg]
+      if (chosen === undefined) return { text: 'Themes: windows7, macos, ubuntu (or set Theme in /config).' }
+      await update($, themeOverride, () => chosen.name)
+      return { text: `Theme set to ${chosen.label} (this session).` }
+    }
+    if (verb !== '') {
+      return { text: 'Try /studio, /studio timeline | usage | music, or /studio theme <windows7 | macos | ubuntu>.' }
+    }
     if (isOpen) {
       await $.ui.close({ id: PANE })
       return { text: 'Mascot Studio closed.' }
@@ -303,7 +328,6 @@ export const register: Register = (on, options) => {
     try {
       const now = await $.clock.now()
       await update($, activity, () => ({ pose: 'thinking', since: now }) as Activity)
-      await update($, scene, () => 1 as Scene)
       await update($, turnStartedAt, () => now)
       await wake($)
       await update($, idleSince, () => null)
@@ -328,7 +352,6 @@ export const register: Register = (on, options) => {
         void (async () => {
           if ((await read($, turnStartedAt)) !== null) return
           const at = await $.clock.now()
-          await update($, scene, () => 2 as Scene)
           await update($, activity, () => ({ pose: 'idle', since: at }) as Activity)
           await update($, idleSince, () => at)
         })()
@@ -370,6 +393,28 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
+  on('ui.message', { requestId: PANE }, async ($, e, next) => {
+    try {
+      const click = (e.data as { click?: unknown } | null)?.click
+      if (typeof click === 'string') {
+        if (click.startsWith('tab:') && TAB_NAMES[click.slice(4)] !== undefined) {
+          const chosen = TAB_NAMES[click.slice(4)] as Tab
+          await update($, tab, () => chosen)
+        } else if (click === 'close') {
+          await $.ui.close({ id: PANE })
+        }
+      }
+    } catch {
+      // a click the studio cannot act on is ignored
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('ui.fault', { requestId: PANE }, async ($, e, next) => {
+    faulted.add(e.element)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('session.measure', async ($, e, next) => {
     try {
       const calls = (await read($, keyframes)).at(-1)?.n ?? 0
@@ -408,7 +453,9 @@ export const register: Register = (on, options) => {
     const act = await read($, activity)
     const frames = await read($, keyframes)
     const selected = await read($, selectedFrame)
-    const sc = await read($, scene)
+    const shownTab = await read($, tab)
+    const override = await read($, themeOverride)
+    const theme = themeFor(override ?? String(options.theme ?? 'auto'), osName)
     const startedAt = await read($, turnStartedAt)
     const figures = await read($, usage)
     const history = await read($, contextHistory)
@@ -420,21 +467,21 @@ export const register: Register = (on, options) => {
     const soundStatus = await read($, sound)
     const soundKeys = await read($, soundFrames)
     const hasSound = options.sound !== false
-    const layout = layoutFor(cols, rows, sc, hasSound)
+    const layout = layoutV2(cols, rows)
     const current = frames.at(-1)?.n ?? 0
 
     const model: AnimModel = {}
-    if (!layout.tooNarrow && (sc === 1 || isSaving)) {
+    if (!layout.tooNarrow) {
       model.stage = {
-        cols,
+        cols: layout.stageCols,
         pose: act.pose,
         hat: hatFor(new Date(at)),
-        theme: themeFor(String(options.theme ?? 'auto'), osName).name,
+        theme: theme.name,
         idleSince: quietSince,
         screensaver: isSaving ? { since: (quietSince ?? at) + screensaverMs } : null,
       }
     }
-    if (!layout.tooNarrow && layout.amp === 'full') {
+    if (!layout.tooNarrow && hasSound && shownTab === 'music') {
       model.amp = {
         lcdCols: cols - 14,
         marquee: marqueeOf(soundStatus),
@@ -442,7 +489,7 @@ export const register: Register = (on, options) => {
         heights: vizHeights,
       }
     }
-    if (!layout.tooNarrow && sc === 2 && !isSaving) {
+    if (!layout.tooNarrow && shownTab === 'usage') {
       model.tm = {
         ...taskManagerSizes(cols),
         samples: history,
@@ -455,12 +502,27 @@ export const register: Register = (on, options) => {
     const rasters = rasterFrames(model, tick, at)
     drawn = { model, mounted: new Set(rasters.map(frame => frame.key)) }
 
+    const row = (key: string, segments: RowSegment[]) =>
+      faulted.has(key) ? segmentsText(els, segments) : <els.Client key={key} module="./client/row.tsx" props={{ segments }} width={cols} height={1} />
+    const fiveHour = figures.rateLimits.find(limit => limit.kind === 'five_hour')?.percentUsed
+    const song = trackOf(soundStatus)?.title
+    const parts = {
+      title: row('title', titleSegments(theme, cols)),
+      tabs: row('tabs', tabSegments(theme, cols, shownTab)),
+      status: row('status', statusSegments(theme, cols, {
+        ...(figures.contextPercent !== undefined ? { context: figures.contextPercent } : {}),
+        ...(fiveHour !== undefined ? { fiveHour } : {}),
+        ...(hasSound && song !== undefined ? { song } : {}),
+      })),
+    }
+
     return studioView(
       els,
       {
         cols,
         layout,
-        scene: sc,
+        theme,
+        tab: shownTab,
         keyframes: frames,
         soundFrames: soundKeys,
         dialog: shownDialog,
@@ -471,12 +533,12 @@ export const register: Register = (on, options) => {
         elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
         visitors: visitorCount,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
-        ...(hasSound ? { amp: { cols, mode: layout.amp === 'line' ? ('line' as const) : ('full' as const), status: soundStatus } } : {}),
-        ...(sc === 2
+        ...(hasSound ? { amp: { cols, mode: 'full' as const, status: soundStatus } } : {}),
+        ...(shownTab === 'usage'
           ? {
               tm: {
                 cols,
-                boxes: layout.tmBoxes,
+                boxes: true,
                 ...(figures.contextPercent !== undefined ? { pct: figures.contextPercent } : {}),
                 limits: limitsView(figures, new Date(at)),
                 costLabel: costLabel(figures),
@@ -491,7 +553,6 @@ export const register: Register = (on, options) => {
         selectFrame: n => void update($, selectedFrame, () => n),
         live: () => void update($, selectedFrame, () => null),
         dismissDialog: () => void setDialog($, null),
-        toggleScene: () => void update($, scene, s => (s === 1 ? 2 : 1) as Scene),
         sound: (action: SoundAction) => {
           void (async () => {
             const track = trackOf(await read($, sound))
@@ -503,6 +564,7 @@ export const register: Register = (on, options) => {
           void update($, sound, () => ({ kind: 'nothing' }) as SoundStatus).then(() => watchSound($))
         },
       },
+      parts,
     )
   })
 }
