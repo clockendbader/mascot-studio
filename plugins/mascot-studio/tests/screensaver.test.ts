@@ -1,11 +1,10 @@
 import { test, expect, describe } from 'claude-code/testing'
 import { screensaverCells, screensaverKindAt } from '../hooks/art/screensavers'
 import type { ScreensaverKind } from '../hooks/art/screensavers'
-import { WORK_AREA } from '../hooks/art/stage'
 import { answerEngine, completeTurn, mountPane, startSession, startTurn } from './harness'
 import { decode } from './cells'
 
-const KINDS: ScreensaverKind[] = ['pipes', 'starfield', 'flying-cats']
+const KINDS: ScreensaverKind[] = ['pipes', 'starfield', 'flying-clawds']
 
 function lit(cells: string): number {
   const words = decode(cells)
@@ -30,21 +29,23 @@ describe('screensaverCells', () => {
     expect(lit(screensaverCells('pipes', 46, 12, 50, 3))).toBeGreaterThan(lit(screensaverCells('pipes', 46, 12, 5, 3)))
   })
 
-  test('stars and cats move', () => {
+  test('stars and Clawds move', () => {
     expect(screensaverCells('starfield', 46, 12, 1, 3)).not.toBe(screensaverCells('starfield', 46, 12, 2, 3))
-    expect(screensaverCells('flying-cats', 46, 12, 1, 3)).not.toBe(screensaverCells('flying-cats', 46, 12, 2, 3))
+    expect(screensaverCells('flying-clawds', 46, 12, 1, 3)).not.toBe(screensaverCells('flying-clawds', 46, 12, 2, 3))
   })
 })
 
 test('the screensavers take turns a minute each', () => {
   expect(screensaverKindAt(0)).toBe('pipes')
   expect(screensaverKindAt(61_000)).toBe('starfield')
-  expect(screensaverKindAt(121_000)).toBe('flying-cats')
+  expect(screensaverKindAt(121_000)).toBe('flying-clawds')
   expect(screensaverKindAt(181_000)).toBe('pipes')
 })
 
+const DESK = 0xc8b39a
+
 function hasWorkArea(cells: string | undefined): boolean {
-  return cells !== undefined && decode(cells).includes(WORK_AREA)
+  return cells !== undefined && decode(cells).includes(DESK)
 }
 
 test('an idle studio starts the screensaver and a new turn wakes it', { options: { screensaverMinutes: 1 } }, async ($, on) => {

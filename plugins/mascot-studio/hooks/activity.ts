@@ -5,34 +5,34 @@ export const MAX_KEYFRAMES = 200
 const PLAYHEAD_MARGIN = 8
 
 const POSES: Readonly<Record<string, Pose>> = {
-  Read: 'magnify',
-  Grep: 'magnify',
-  Glob: 'magnify',
-  LS: 'magnify',
-  NotebookRead: 'magnify',
-  ToolSearch: 'magnify',
-  Edit: 'tablet',
-  Write: 'tablet',
-  MultiEdit: 'tablet',
-  NotebookEdit: 'tablet',
-  Bash: 'keyboard',
-  PowerShell: 'keyboard',
-  BashOutput: 'keyboard',
-  KillShell: 'keyboard',
-  Monitor: 'keyboard',
-  WebFetch: 'browser',
-  WebSearch: 'browser',
+  Read: 'reading',
+  Grep: 'reading',
+  Glob: 'reading',
+  LS: 'reading',
+  NotebookRead: 'reading',
+  ToolSearch: 'reading',
+  Edit: 'coding',
+  Write: 'coding',
+  MultiEdit: 'coding',
+  NotebookEdit: 'coding',
+  Bash: 'terminal',
+  PowerShell: 'terminal',
+  BashOutput: 'terminal',
+  KillShell: 'terminal',
+  Monitor: 'terminal',
+  WebFetch: 'browsing',
+  WebSearch: 'browsing',
   Agent: 'helper',
   Task: 'helper',
-  AskUserQuestion: 'wave',
+  AskUserQuestion: 'waving',
 }
 
 export function poseForTool(tool: string): Pose {
   const pose = POSES[tool]
   if (pose !== undefined) return pose
   const lower = tool.toLowerCase()
-  if (lower.includes('browser') || lower.includes('chrome')) return 'browser'
-  return 'tablet'
+  if (lower.includes('browser') || lower.includes('chrome')) return 'browsing'
+  return 'coding'
 }
 
 export function firstLine(text: string): string {

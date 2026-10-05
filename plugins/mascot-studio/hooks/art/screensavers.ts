@@ -1,14 +1,14 @@
 // Three original screensavers, drawn deterministically from a seed and the
-// number of ticks since they started: growing pipes, a starfield, and cats
-// with toast wings drifting across the Stage.
+// number of ticks since they started: growing pipes, a starfield, and mini Clawds
+// (mini Clawds) with toast wings drifting across the Stage.
 
-import { MINI, spriteGrid } from './sprites'
-import { drawSprite, gridToCells, newGrid } from './pixels'
+import { drawMiniClawd } from './clawd'
+import { gridToCells, newGrid } from './pixels'
 import type { Grid } from './pixels'
 
-export type ScreensaverKind = 'pipes' | 'starfield' | 'flying-cats'
+export type ScreensaverKind = 'pipes' | 'starfield' | 'flying-clawds'
 
-const ORDER: readonly ScreensaverKind[] = ['pipes', 'starfield', 'flying-cats']
+const ORDER: readonly ScreensaverKind[] = ['pipes', 'starfield', 'flying-clawds']
 const TURN_MS = 60_000
 const BLACK = 0x000000
 
@@ -106,9 +106,8 @@ const CATS = 3
 const WING_UP = 0xe8c48a
 const WING_DOWN = 0xc68e3e
 
-function flyingCats(g: Grid, tick: number, seed: number): void {
+function flyingClawds(g: Grid, tick: number, seed: number): void {
   const rand = prng(seed)
-  const cat = MINI.relaxed
   for (let i = 0; i < CATS; i++) {
     const x0 = rand() * (g.w + 16)
     const y0 = rand() * (g.h + 8)
@@ -120,7 +119,7 @@ function flyingCats(g: Grid, tick: number, seed: number): void {
       set(g, x + dx, y + (flap ? 2 : 3), wing)
       set(g, x + dx, y + (flap ? 3 : 4), wing)
     }
-    drawSprite(g, spriteGrid((cat[(tick + i) % cat.length] ?? cat[0])?.rows ?? []), x, y)
+    drawMiniClawd(g, x, y + 1, tick + i)
   }
 }
 
@@ -129,6 +128,6 @@ export function screensaverCells(kind: ScreensaverKind, cols: number, rows: numb
   const g = newGrid(cols, rows * 2, BLACK)
   if (kind === 'pipes') pipes(g, tick, seed)
   else if (kind === 'starfield') starfield(g, tick, seed)
-  else flyingCats(g, tick, seed)
+  else flyingClawds(g, tick, seed)
   return gridToCells(g)
 }

@@ -1,11 +1,13 @@
-import type { Hat, Pose } from '../types'
+import type { Hat, Pose, ThemeName } from '../types'
 import { VIZ_BARS, djCells, historyCells, lcdCells, ledMeterCells, titleBarCells, visualizerCells } from './art/instruments'
 import { screensaverCells, screensaverKindAt } from './art/screensavers'
 import { STAGE_ROWS, stageCells } from './art/stage'
 import { miniMood } from './usage'
+import { THEMES } from './themes'
 
 export const TICK_MS = 166
 const SCREENSAVER_TURN_MS = 60_000
+const ASLEEP_AFTER_MS = 60_000
 
 export type RasterKey = 'stage' | 'tm-title' | 'ctx-meter' | 'ctx-graph' | 'lcd' | 'viz' | 'dj'
 export type RasterFrame = { key: RasterKey; columns: number; rows: number; cells: string }
@@ -33,7 +35,7 @@ export type AmpAnim = {
 
 export type AnimModel = {
   /** `screensaver.since`: when the screensaver started; which one shows and how far it has run follow from the clock. */
-  stage?: { cols: number; pose: Pose; hat: Hat; screensaver: { since: number } | null }
+  stage?: { cols: number; pose: Pose; hat: Hat; theme: ThemeName; idleSince: number | null; screensaver: { since: number } | null }
   tm?: TaskManagerAnim
   amp?: AmpAnim
 }
@@ -42,9 +44,12 @@ export type AnimModel = {
 export function rasterFrames(m: AnimModel, tick: number, now: number): RasterFrame[] {
   const frames: RasterFrame[] = []
   if (m.stage !== undefined) {
-    const { cols, pose, hat, screensaver } = m.stage
+    const { cols, hat, screensaver, idleSince } = m.stage
+    const isAsleep = m.stage.pose === 'idle' && idleSince !== null && now - idleSince >= ASLEEP_AFTER_MS
+    const pose: Pose = isAsleep ? 'asleep' : m.stage.pose
+    const backdrop = THEMES[m.stage.theme].backdrop
     if (screensaver === null) {
-      frames.push({ key: 'stage', columns: cols, rows: STAGE_ROWS, cells: stageCells({ cols, rows: STAGE_ROWS, pose, hat, tick }) })
+      frames.push({ key: 'stage', columns: cols, rows: STAGE_ROWS, cells: stageCells({ cols, pose, hat, tick, backdrop }) })
     } else {
       const running = Math.max(0, now - screensaver.since)
       const kind = screensaverKindAt(running)

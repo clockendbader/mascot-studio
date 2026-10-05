@@ -1,25 +1,31 @@
 import type { Hat, Pose } from '../../types'
-import { composeMascot } from './sprites'
-import { drawSprite, fillRect, gridToCells, newGrid } from './pixels'
+import { SCENE_H, SCENE_W, sceneFrame } from './scene'
+import { drawSprite, gridToCells, newGrid } from './pixels'
 
 export const STAGE_ROWS = 12
-export const WORK_AREA = 0x9a9a9a
-export const CANVAS = 0xffffff
-const SHADOW = 0x666666
-const MAX_CANVAS = 40
-const SPRITE = 24
+const DESK_TOP = 19
+const DESK = 0xc8b39a
+const DESK_EDGE = 0x9c8569
 
-export type StageOptions = { cols: number; rows: number; pose: Pose; hat: Hat; tick: number }
+export type StageOptions = {
+  cols: number
+  pose: Pose
+  hat: Hat
+  tick: number
+  /** The theme's backdrop colour at scene pixel (x, y). */
+  backdrop: (x: number, y: number) => number
+}
 
-/** The Stage: a white canvas with a drop shadow on the grey work area, the mascot standing on it. */
+/** The Stage: the theme's backdrop, the desk across the full width, and the scene centred (or clipped on the right when narrow). */
 export function stageCells(o: StageOptions): string {
-  const h = o.rows * 2
-  const g = newGrid(o.cols, h, WORK_AREA)
-  const cw = Math.min(o.cols, MAX_CANVAS)
-  const x0 = Math.floor((o.cols - cw) / 2)
-  fillRect(g, x0 + 1, 2, cw, h - 2, SHADOW)
-  fillRect(g, x0, 1, cw, h - 2, CANVAS)
-  const bottom = h - 2
-  drawSprite(g, composeMascot(o.pose, o.hat, o.tick), x0 + Math.floor((cw - SPRITE) / 2), bottom - SPRITE + 1)
+  const g = newGrid(o.cols, SCENE_H, 0)
+  const x0 = o.cols >= SCENE_W + 2 ? Math.floor((o.cols - SCENE_W) / 2) : 1
+  for (let y = 0; y < SCENE_H; y++) {
+    for (let x = 0; x < o.cols; x++) {
+      const sceneX = Math.min(SCENE_W - 1, Math.max(0, x - x0))
+      g.px[y * o.cols + x] = y === DESK_TOP ? DESK : y === DESK_TOP + 1 ? DESK_EDGE : o.backdrop(sceneX, y)
+    }
+  }
+  drawSprite(g, sceneFrame(o.pose, o.hat, o.tick), x0, 0)
   return gridToCells(g)
 }

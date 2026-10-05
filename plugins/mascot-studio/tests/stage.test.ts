@@ -1,45 +1,63 @@
 import { test, expect, describe } from 'claude-code/testing'
-import { stageCells, STAGE_ROWS, WORK_AREA, CANVAS } from '../hooks/art/stage'
+import { STAGE_ROWS, stageCells } from '../hooks/art/stage'
 import { rasterFrames } from '../hooks/animator'
+import { THEMES } from '../hooks/themes'
 import { cellAt, decode } from './cells'
 
-const base = { rows: STAGE_ROWS, pose: 'tablet' as const, hat: 'beanie' as const, tick: 0 }
-
-function column(cells: string, cols: number, col: number): number[] {
-  const colors: number[] = []
-  for (let row = 0; row < STAGE_ROWS; row++) {
-    const [, fg, bg] = cellAt(cells, cols, col, row)
-    colors.push(fg ?? -1, bg ?? -1)
-  }
-  return colors
-}
+const sky = THEMES.windows7.backdrop
+const base = { pose: 'coding' as const, hat: 'none' as const, tick: 0, backdrop: sky }
 
 describe('stageCells', () => {
   test('fills the whole raster', () => {
     expect(decode(stageCells({ ...base, cols: 46 }))).toHaveLength(46 * 12 * 3)
   })
 
-  test('shows the grey work area at the edges of a wide stage', () => {
-    expect(new Set(column(stageCells({ ...base, cols: 46 }), 46, 0))).toEqual(new Set([WORK_AREA]))
+  test('shows the theme backdrop at the edges of a wide stage', () => {
+    const [, top] = cellAt(stageCells({ ...base, cols: 46 }), 46, 0, 0)
+    expect(top).toBe(sky(0, 0))
   })
 
-  test('shows the white canvas in the middle', () => {
-    expect(column(stageCells({ ...base, cols: 46 }), 46, 23)).toContain(CANVAS)
+  test('centres the 40-pixel scene when there is room', () => {
+    const cells = stageCells({ ...base, cols: 46 })
+    for (const col of [0, 1, 2]) {
+      for (let row = 0; row < STAGE_ROWS; row++) {
+        const [, fg] = cellAt(cells, 46, col, row)
+        expect(fg).not.toBe(0xd97757)
+      }
+    }
   })
 
-  test('lets the canvas fill a narrow stage', () => {
-    const cells = stageCells({ ...base, cols: 24 })
-    for (let col = 0; col < 24; col++) expect(column(cells, 24, col).every(c => c === WORK_AREA)).toBe(false)
+  test('clips a narrow stage on the right, keeping Clawd', () => {
+    const cells = stageCells({ ...base, cols: 34 })
+    expect(decode(cells)).toHaveLength(34 * 12 * 3)
+    expect(decode(cells)).toContain(0xd97757)
   })
 
-  test('animates the pose from tick to tick', () => {
+  test('animates from tick to tick', () => {
     expect(stageCells({ ...base, cols: 46, tick: 0 })).not.toBe(stageCells({ ...base, cols: 46, tick: 1 }))
   })
 })
 
-test('rasterFrames draws one stage raster for the studio scene', () => {
-  const frames = rasterFrames({ stage: { cols: 46, pose: 'tablet', hat: 'beanie', screensaver: null } }, 0, 0)
-  expect(frames).toHaveLength(1)
-  expect(frames[0]).toMatchObject({ key: 'stage', columns: 46, rows: 12 })
-  expect(frames[0]?.cells).toBe(stageCells({ ...base, cols: 46 }))
+describe('rasterFrames', () => {
+  const stage = { cols: 46, pose: 'coding' as const, hat: 'none' as const, theme: 'windows7' as const, idleSince: null, screensaver: null }
+
+  test('draws one stage raster for the studio', () => {
+    const frames = rasterFrames({ stage }, 0, 0)
+    expect(frames).toHaveLength(1)
+    expect(frames[0]).toMatchObject({ key: 'stage', columns: 46, rows: 12 })
+    expect(frames[0]?.cells).toBe(stageCells({ ...base, cols: 46 }))
+  })
+
+  test('an idle Clawd falls asleep after a quiet minute, without a redraw', () => {
+    const idle = { ...stage, pose: 'idle' as const, idleSince: 0 }
+    const awake = rasterFrames({ stage: idle }, 0, 1000)[0]?.cells
+    const later = rasterFrames({ stage: idle }, 0, 61000)[0]?.cells
+    expect(later).toBe(stageCells({ ...base, pose: 'asleep', cols: 46 }))
+    expect(awake).toBe(stageCells({ ...base, pose: 'idle', cols: 46 }))
+  })
+
+  test('uses the theme backdrop', () => {
+    const ubuntu = rasterFrames({ stage: { ...stage, theme: 'ubuntu' } }, 0, 0)[0]?.cells ?? ''
+    expect(cellAt(ubuntu, 46, 0, 0)[1]).toBe(THEMES.ubuntu.backdrop(0, 0))
+  })
 })

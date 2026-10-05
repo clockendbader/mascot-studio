@@ -12,21 +12,21 @@ import {
 import type { Keyframe } from '../types'
 
 describe('poseForTool', () => {
-  test('reading and searching tools use the magnifier', () => {
-    for (const tool of ['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'ToolSearch']) expect(poseForTool(tool)).toBe('magnify')
+  test('reading and searching tools read', () => {
+    for (const tool of ['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'ToolSearch']) expect(poseForTool(tool)).toBe('reading')
   })
 
-  test('editing tools use the pen tablet', () => {
-    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) expect(poseForTool(tool)).toBe('tablet')
+  test('editing tools code', () => {
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) expect(poseForTool(tool)).toBe('coding')
   })
 
-  test('shell tools use the keyboard', () => {
-    for (const tool of ['Bash', 'PowerShell', 'BashOutput', 'KillShell', 'Monitor']) expect(poseForTool(tool)).toBe('keyboard')
+  test('shell tools use the terminal', () => {
+    for (const tool of ['Bash', 'PowerShell', 'BashOutput', 'KillShell', 'Monitor']) expect(poseForTool(tool)).toBe('terminal')
   })
 
-  test('web and browser tools use the tiny browser', () => {
+  test('web and browser tools browse', () => {
     for (const tool of ['WebFetch', 'WebSearch', 'mcp__claude-in-chrome__navigate', 'mcp__built-in-browser__click']) {
-      expect(poseForTool(tool)).toBe('browser')
+      expect(poseForTool(tool)).toBe('browsing')
     }
   })
 
@@ -36,11 +36,11 @@ describe('poseForTool', () => {
   })
 
   test('a question to the person waves', () => {
-    expect(poseForTool('AskUserQuestion')).toBe('wave')
+    expect(poseForTool('AskUserQuestion')).toBe('waving')
   })
 
-  test('anything else uses the pen tablet', () => {
-    expect(poseForTool('Frobnicate')).toBe('tablet')
+  test('anything else codes', () => {
+    expect(poseForTool('Frobnicate')).toBe('coding')
   })
 })
 
@@ -78,7 +78,7 @@ test('truncateMiddle keeps both ends around an ellipsis', () => {
   expect(truncateMiddle('short', 12)).toBe('short')
 })
 
-const start = (id: string, startedAt = 0) => ({ id, tool: 'Read', target: '', pose: 'magnify' as const, startedAt })
+const start = (id: string, startedAt = 0) => ({ id, tool: 'Read', target: '', pose: 'reading' as const, startedAt })
 
 describe('keyframes', () => {
   test('keep the newest 200 and keep numbering past the cap', () => {

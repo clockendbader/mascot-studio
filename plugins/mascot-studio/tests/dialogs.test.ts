@@ -34,7 +34,7 @@ describe('error dialog', () => {
     await failed($, clock)
     fail = false
     const v = await view($)
-    expect(v.pose).toMatch(/Pose\s+facepalm/)
+    expect(v.pose).toMatch(/Pose\s+oops/)
     expect(v.dialog).toBeDefined()
     expect(await v.ui.find({ type: 'Text', text: 'Mascot Programming' })).toBeDefined()
     expect(await v.ui.find({ type: 'Text', text: /✖.*Read failed: ENOENT: no such file/ })).toBeDefined()

@@ -4,8 +4,8 @@
 import type { MiniMood } from '../../types'
 import { level } from '../usage'
 import type { Level } from '../usage'
-import { DJ, MINI, spriteGrid } from './sprites'
-import { drawSprite, gridToCells, newGrid, sanitizeForRaster, textWords, wordsToCells } from './pixels'
+import { drawMiniClawd } from './clawd'
+import { TRANSPARENT, gridToCells, newGrid, sanitizeForRaster, textWords, wordsToCells } from './pixels'
 
 export const LED_GREEN = 0x00ff00
 export const LED_DIM = 0x004000
@@ -15,6 +15,7 @@ const WHITE = 0xffffff
 const TITLE_FROM = 0x0a246a
 const TITLE_TO = 0xa6caf0
 const MINI_SIZE = 8
+const MINI_HEIGHT = 4
 
 const LIT: Readonly<Record<Level, number>> = { ok: LED_GREEN, warn: 0xffb000, critical: 0xff3030 }
 
@@ -58,10 +59,9 @@ export function historyCells(samples: readonly number[], cols: number, rows: num
   })
 
   const pointY = shown.length === 0 ? h : h - 1 - heightOf(shown[shown.length - 1] ?? 0, h)
-  const frames = MINI[mini.mood]
-  const frame = frames[mini.tick % frames.length] ?? frames[0]
-  const top = Math.min(Math.max(0, pointY - MINI_SIZE), h - MINI_SIZE)
-  drawSprite(g, spriteGrid(frame?.rows ?? []), cols - MINI_SIZE, top)
+  const top = Math.min(Math.max(0, pointY - MINI_HEIGHT), h - MINI_HEIGHT)
+  const mood = mini.mood === 'asleep' || mini.mood === 'flat' ? 'asleep' : mini.mood === 'sweat' ? 'sweat' : 'awake'
+  drawMiniClawd(g, cols - MINI_SIZE, top, mini.tick, mood)
   return gridToCells(g)
 }
 
@@ -112,7 +112,24 @@ export function nextHeights(prev: readonly number[], playing: boolean, rand: () 
   )
 }
 
+const DJ_PALETTE: Readonly<Record<string, number>> = { z: 0x000000, d: 0x7a3fa0, D: 0xa060c8, k: 0x1a1a1a }
+const DJ_UP = ['..zzzzzz..', '.z......z.', 'zz.dddd.zz', 'zzdddddDzz', '.ddkddkdd.', '.dddddddd.', '.ddDkkDdd.', '.dddddddd.', '..dddddd..', '..k....k..']
+const DJ_SQUASH = ['..........', '..zzzzzz..', '.z......z.', 'zzddddddzz', 'zddkddkddz', 'dddddddddd', '.ddDkkDdd.', '.dddddddd.', '.dddddddd.', '.k......k.']
+const withRows = (base: readonly string[], changes: Readonly<Record<number, string>>) => base.map((row, i) => changes[i] ?? row)
+const DJ: Readonly<Record<'dance' | 'sway' | 'doze', readonly (readonly string[])[]>> = {
+  dance: [DJ_UP, DJ_SQUASH, withRows(DJ_UP, { 5: 'kddddddddk', 9: '...k..k...' }), withRows(DJ_SQUASH, { 9: 'k........k' })],
+  sway: [DJ_UP, withRows(DJ_UP, { 9: '...k..k...' })],
+  doze: [withRows(DJ_UP, { 4: '.dkkddkkd.' }), withRows(DJ_UP, { 1: '.z......zk', 4: '.dkkddkkd.' })],
+}
+
+function paletteGrid(rows: readonly string[], palette: Readonly<Record<string, number>>) {
+  const g = newGrid(rows[0]?.length ?? 0, rows.length, TRANSPARENT)
+  rows.forEach((row, y) => [...row].forEach((ch, x) => (g.px[y * g.w + x] = palette[ch] ?? TRANSPARENT)))
+  return g
+}
+
+/** The DJ blob, 10x10 px: dancing while music plays, swaying when paused, dozing otherwise. */
 export function djCells(mode: 'dance' | 'sway' | 'doze', tick: number): string {
   const frames = DJ[mode]
-  return gridToCells(spriteGrid((frames[tick % frames.length] ?? frames[0])?.rows ?? []))
+  return gridToCells(paletteGrid(frames[tick % frames.length] ?? frames[0] ?? [], DJ_PALETTE))
 }

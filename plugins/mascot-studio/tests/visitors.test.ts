@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { stageCells } from '../hooks/art/stage'
+import { THEMES } from '../hooks/themes'
 import { answerEngine, mountPane, startSession } from './harness'
 
 async function footer($: Engine): Promise<string> {
@@ -52,13 +53,13 @@ async function stageOn($: Engine) {
 }
 
 test('October puts the pumpkin on the mascot', async ($, on) => {
-  answerEngine(on, { now: new Date(2026, 9, 5, 12).getTime() })
+  answerEngine(on, { now: new Date(2026, 9, 5, 12).getTime(), os: 'windows' })
   await startSession($)
-  expect(await stageOn($)).toBe(stageCells({ cols: 46, rows: 12, pose: 'asleep', hat: 'pumpkin', tick: 0 }))
+  expect(await stageOn($)).toBe(stageCells({ cols: 46, pose: 'idle', hat: 'pumpkin', tick: 0, backdrop: THEMES.windows7.backdrop }))
 })
 
-test('an ordinary day is the grey beanie', async ($, on) => {
-  answerEngine(on, { now: new Date(2026, 6, 4, 12).getTime() })
+test('an ordinary day has no hat', async ($, on) => {
+  answerEngine(on, { now: new Date(2026, 6, 4, 12).getTime(), os: 'windows' })
   await startSession($)
-  expect(await stageOn($)).toBe(stageCells({ cols: 46, rows: 12, pose: 'asleep', hat: 'beanie', tick: 0 }))
+  expect(await stageOn($)).toBe(stageCells({ cols: 46, pose: 'idle', hat: 'none', tick: 0, backdrop: THEMES.windows7.backdrop }))
 })

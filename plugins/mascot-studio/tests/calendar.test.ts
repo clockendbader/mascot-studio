@@ -15,15 +15,15 @@ describe('hatFor', () => {
 
   test('wears the party hat on January 1 only', () => {
     expect(hatFor(local(1, 1))).toBe('party')
-    expect(hatFor(local(1, 2))).toBe('beanie')
+    expect(hatFor(local(1, 2))).toBe('none')
   })
 
   test('wears the heart beanie on February 14', () => {
     expect(hatFor(local(2, 14))).toBe('heart')
   })
 
-  test('wears the grey beanie on any other day', () => {
-    expect(hatFor(local(7, 4))).toBe('beanie')
+  test('wears no hat on any other day', () => {
+    expect(hatFor(local(7, 4))).toBe('none')
   })
 })
 

@@ -40,18 +40,18 @@ test('a failed call shows its keyframe as ✖ with its first error line', async 
   expect(await v.ui.find({ type: 'Text', text: /✖.*boom/ })).toBeDefined()
 })
 
-test('a finished turn hops, then switches to Scene 2 asleep', async ($, on) => {
+test('a finished turn hops, then switches to Scene 2 idle', async ($, on) => {
   const { clock } = answerEngine(on)
   await startSession($)
   await startTurn($)
   await completeTurn($)
   const hop = await view($)
-  expect(hop.pose).toMatch(/Pose\s+export movie/)
+  expect(hop.pose).toMatch(/Pose\s+done/)
   expect(hop.isStudio).toBe(true)
   await hop.ui.unmount()
   await clock.advance(1500)
   const later = await view($)
-  expect(later.pose).toMatch(/Pose\s+asleep/)
+  expect(later.pose).toMatch(/Pose\s+idle/)
   expect(later.isStudio).toBe(false)
 })
 
@@ -80,7 +80,7 @@ test('parallel calls keep the newest pose until all have settled', async ($, on)
   pending.get('p1')?.()
   await p1
   const during = await view($)
-  expect(during.pose).toMatch(/Pose\s+keyboard/)
+  expect(during.pose).toMatch(/Pose\s+running a command/)
   await during.ui.unmount()
   pending.get('p2')?.()
   await p2

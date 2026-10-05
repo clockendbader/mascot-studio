@@ -40,16 +40,17 @@ export type StudioActions = TimelineActions &
 
 const MENU = ' File  Edit  View  Insert  Modify  Control'
 
-const POSE_WORDS: Readonly<Record<Pose, string>> = {
+export const POSE_WORDS: Readonly<Record<Pose, string>> = {
   thinking: 'thinking',
-  magnify: 'magnifier',
-  tablet: 'pen tablet',
-  keyboard: 'keyboard',
-  browser: 'browser',
+  coding: 'coding',
+  reading: 'reading',
+  terminal: 'running a command',
+  browsing: 'browsing the web',
   helper: 'calling a helper',
-  facepalm: 'facepalm',
-  wave: 'waving',
-  hop: 'export movie',
+  oops: 'oops',
+  waving: 'waving',
+  done: 'done',
+  idle: 'idle',
   asleep: 'asleep',
 }
 

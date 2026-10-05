@@ -9,6 +9,7 @@ import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
 import { QUESTION_TEXT, needsYouText, notifiedText, statusLine } from './alerts'
 import { layoutFor } from './layout'
+import { themeFor } from './themes'
 import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
 import { taskManagerSizes } from './views/taskManager'
@@ -22,11 +23,11 @@ import { windowsBackend } from './sound/windows'
 import { studioView } from './views/studio'
 
 const PANE = 'mascot-studio'
-const HOP_MS = 1500
+const HOP_MS = 1000
 const ERROR_DIALOG_MS = 8000
 
 const opener = atom({ plugin: 'mascot-studio', key: 'opener' } as const, null as Opener)
-const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { pose: 'asleep', since: 0 } as Activity)
+const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { pose: 'idle', since: 0 } as Activity)
 const keyframes = atom({ plugin: 'mascot-studio', key: 'keyframes' } as const, [] as Keyframe[])
 const selectedFrame = atom({ plugin: 'mascot-studio', key: 'selectedFrame' } as const, null as number | null)
 const scene = atom({ plugin: 'mascot-studio', key: 'scene' } as const, 1 as Scene)
@@ -122,7 +123,7 @@ async function clearDialog($: EngineInterface, kind: 'error' | 'needs-you'): Pro
 async function needsYou($: EngineInterface, text: string): Promise<void> {
   const at = await $.clock.now()
   await setDialog($, { kind: 'needs-you', text, at })
-  await update($, activity, last => ({ ...last, pose: 'wave', since: at }) as Activity)
+  await update($, activity, last => ({ ...last, pose: 'waving', since: at }) as Activity)
 }
 
 /** Counts one more visitor (tool call) and saves the lifetime total; a failed save catches up next time. */
@@ -281,7 +282,7 @@ export const register: Register = (on, options) => {
       const isAllDone = (await read($, keyframes)).every(frame => frame.durationMs !== undefined)
       if (errorLine !== undefined) {
         const tool = String(e.tool)
-        await update($, activity, last => ({ ...last, pose: 'facepalm', since: ended }) as Activity)
+        await update($, activity, last => ({ ...last, pose: 'oops', since: ended }) as Activity)
         await setDialog($, { kind: 'error', tool, line: errorLine, at: ended })
         $.clock.after(ERROR_DIALOG_MS, () => {
           void (async () => {
@@ -318,7 +319,7 @@ export const register: Register = (on, options) => {
     try {
       const now = await $.clock.now()
       await clearDialog($, 'needs-you')
-      await update($, activity, () => ({ pose: 'hop', since: now }) as Activity)
+      await update($, activity, () => ({ pose: 'done', since: now }) as Activity)
       await update($, turns, n => n + 1)
       await update($, turnStartedAt, () => null)
       const pct = (await read($, usage)).contextPercent
@@ -328,7 +329,7 @@ export const register: Register = (on, options) => {
           if ((await read($, turnStartedAt)) !== null) return
           const at = await $.clock.now()
           await update($, scene, () => 2 as Scene)
-          await update($, activity, () => ({ pose: 'asleep', since: at }) as Activity)
+          await update($, activity, () => ({ pose: 'idle', since: at }) as Activity)
           await update($, idleSince, () => at)
         })()
       })
@@ -428,6 +429,8 @@ export const register: Register = (on, options) => {
         cols,
         pose: act.pose,
         hat: hatFor(new Date(at)),
+        theme: themeFor(String(options.theme ?? 'auto'), osName).name,
+        idleSince: quietSince,
         screensaver: isSaving ? { since: (quietSince ?? at) + screensaverMs } : null,
       }
     }

@@ -1,7 +1,6 @@
 import { test, expect, describe } from 'claude-code/testing'
 import { historyCells, ledMeterCells, titleBarCells, GRID, LED_GREEN } from '../hooks/art/instruments'
 import { rasterFrames } from '../hooks/animator'
-import { PALETTE } from '../hooks/art/sprites'
 import { cellAt, decode } from './cells'
 
 /** Pixel (x, y) of a half-block raster: the top pixel is a cell's foreground, the bottom its background. */
@@ -55,7 +54,7 @@ describe('historyCells', () => {
 
   test('stands the mini mascot on the newest point', () => {
     const cells = historyCells([0], cols, 5, relaxed)
-    const fur = PALETTE.g
+    const fur = 0xd97757
     let found = false
     for (let x = cols - 8; x < cols; x++) for (let y = 0; y < 9; y++) if (pixel(cells, cols, x, y) === fur) found = true
     expect(found).toBe(true)

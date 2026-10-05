@@ -10,7 +10,7 @@ export function hatFor(d: Date): Hat {
   if (month === 12) return 'santa'
   if (month === 1 && day === 1) return 'party'
   if (month === 2 && day === 14) return 'heart'
-  return 'beanie'
+  return 'none'
 }
 
 function clockTime(d: Date): string {
