@@ -29,6 +29,12 @@ let tick = 0
 let now = 0
 /** What the pane last drew: the ticker repaints these rasters until a repaint is refused. */
 let drawn: { model: AnimModel; mounted: Set<RasterKey> } | null = null
+/** Set while a startup pane that landed inline is being closed, so it closes and hints once. */
+let isClosingStartup = false
+
+const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
+const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
+const paneTitle = () => `Mascot Studio MX · ${folder}.fla`
 
 function folderOf(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(part => part !== '')
@@ -43,7 +49,7 @@ function failureOf(result: unknown): string | undefined {
   return undefined
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
     await $.command.register({ name: 'studio', description: 'Open or close Mascot Studio' })
@@ -61,17 +67,23 @@ export const register: Register = on => {
     $.clock.every(TICK_MS, () => {
       void animate().catch(() => undefined)
     })
+    const hasTerminal = (await $.session.surfaces()).includes('terminal')
+    if (options.openOnStartup !== false && hasTerminal) {
+      await update($, opener, () => 'startup' as Opener)
+      void $.ui.open({ id: PANE, title: paneTitle() })
+    }
     return next(e)
   })
 
   on('command.run', { command: 'studio' }, async $ => {
+    if (!(await $.session.surfaces()).includes('terminal')) return { text: TERMINAL_ONLY }
     const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
     if (isOpen) {
       await $.ui.close({ id: PANE })
       return { text: 'Mascot Studio closed.' }
     }
     await update($, opener, () => 'person' as Opener)
-    await $.ui.open({ id: PANE, title: `Mascot Studio MX · ${folder}.fla` })
+    await $.ui.open({ id: PANE, title: paneTitle() })
     return { text: 'Mascot Studio opened.' }
   })
 
@@ -151,9 +163,24 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     if (e.surface !== 'terminal') {
       const { Text } = $.ui.resolve(e)
-      return <Text>Mascot Studio runs in the terminal for now.</Text>
+      return <Text>{TERMINAL_ONLY}</Text>
     }
     const els = $.ui.resolve(e)
+    if (e.props.placement === 'inline' && (await read($, opener)) === 'startup') {
+      if (!isClosingStartup) {
+        isClosingStartup = true
+        $.clock.after(0, () => {
+          void (async () => {
+            await $.ui.close({ id: PANE })
+            $.ui.toast(STARTUP_HINT)
+            await update($, opener, () => null as Opener)
+            isClosingStartup = false
+          })()
+        })
+      }
+      drawn = null
+      return <els.Box />
+    }
     const cols = e.props.bodyColumns
     const rows = e.props.scroll.bodyRows
     const at = await $.clock.now()

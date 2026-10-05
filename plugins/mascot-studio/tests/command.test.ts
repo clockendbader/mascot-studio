@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { answerEngine, startSession } from './harness'
 
-test('/studio opens the pane, and closes it when open', async ($, on) => {
+test('/studio opens the pane, and closes it when open', { options: { openOnStartup: false } }, async ($, on) => {
   const { rec } = answerEngine(on)
   await startSession($)
   rec.opened.length = 0
