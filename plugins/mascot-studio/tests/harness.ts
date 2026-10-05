@@ -1,0 +1,136 @@
+import { mock } from 'claude-code/testing'
+import type { Engine, MockClock } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+export const PANE = 'mascot-studio'
+export const PLUGIN = 'mascot-studio'
+
+export type ProcResult = { exitCode: number; stdout: string; stderr: string }
+export type Piece = { stream: 'stdout' | 'stderr'; text: string }
+
+export type Recorder = {
+  opened: string[]
+  closed: string[]
+  statuses: (string | undefined)[]
+  toasts: string[]
+  blits: { key: string; cells: string }[]
+  runs: string[][]
+  spawns: string[][]
+}
+
+export type BootOptions = {
+  os?: 'windows' | 'macos' | 'linux'
+  usage?: unknown
+  run?: (argv: string[]) => ProcResult
+  spawn?: (argv: string[]) => AsyncIterable<Piece>
+  store?: Record<string, unknown>
+  now?: number
+  surfaces?: string[]
+  blitDeny?: (key: string) => string | undefined
+}
+
+/** 2026-10-05 12:00 local time. */
+export const DEFAULT_NOW = new Date(2026, 9, 5, 12, 0, 0).getTime()
+
+export const DEFAULT_USAGE = {
+  startedAt: 0,
+  context: { tokens: 84000, window: 200000, percent: 42 },
+  rateLimits: [],
+  cost: { usd: 0.84 },
+}
+
+const UNAME: Record<string, string> = { macos: 'Darwin\n', linux: 'Linux\n' }
+
+function defaultRun(os: BootOptions['os'], argv: string[]): ProcResult {
+  if (argv[0] === 'uname' && os !== undefined && os !== 'windows') {
+    return { exitCode: 0, stdout: UNAME[os] ?? '', stderr: '' }
+  }
+  return { exitCode: 1, stdout: '', stderr: 'not answered by the test' }
+}
+
+async function* noOutput(): AsyncIterable<Piece> {}
+
+/**
+ * Stands beneath the plugin as the engine: answers every call the plugin
+ * makes on `$` and records what it asked for.
+ */
+export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; clock: MockClock } {
+  const rec: Recorder = { opened: [], closed: [], statuses: [], toasts: [], blits: [], runs: [], spawns: [] }
+  const open = new Map<string, string>()
+  const clock = mock.clock(on, { now: opts.now ?? DEFAULT_NOW })
+  mock.env(on, opts.os === 'windows' ? { OS: 'Windows_NT' } : {})
+  mock.store(on, opts.store ?? {})
+
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  on('session.usage', async () => ({ value: opts.usage ?? DEFAULT_USAGE }) as never)
+  on('session.surfaces', async () => ({ value: opts.surfaces ?? ['terminal'] }) as never)
+  on('command.register', async () => ({ value: undefined }) as never)
+  on('ui.open', async (_$, e) => {
+    open.set(e.id, e.title ?? e.id)
+    rec.opened.push(e.id)
+    return { value: { isPlaced: true } } as never
+  })
+  on('ui.close', async (_$, e) => {
+    open.delete(e.id)
+    rec.closed.push(e.id)
+    return { value: undefined } as never
+  })
+  on('ui.panes', async () => ({
+    value: [...open].map(([id, title]) => ({ id, title, isShown: true, isFocused: false, isPlaced: true })),
+  }) as never)
+  on('ui.status', async (_$, e) => {
+    rec.statuses.push(e.text)
+    return { value: undefined } as never
+  })
+  on('ui.toast', async (_$, e) => {
+    rec.toasts.push(e.text)
+    return { value: undefined } as never
+  })
+  on('ui.blit', async (_$, e) => {
+    const key = (e as { key: string }).key
+    rec.blits.push({ key, cells: (e as { cells?: string }).cells ?? '' })
+    const deny = opts.blitDeny?.(key)
+    return { value: deny === undefined ? {} : { deny } } as never
+  })
+  on('process.run', async (_$, e) => {
+    const argv = [...e.argv]
+    rec.runs.push(argv)
+    return { value: (opts.run ?? (a => defaultRun(opts.os, a)))(argv) } as never
+  })
+  on('process.spawn', async function* (_$, e) {
+    const argv = [...e.argv]
+    rec.spawns.push(argv)
+    for await (const piece of (opts.spawn ?? noOutput)(argv)) yield piece
+    return { value: { code: 0, signal: null } } as never
+  })
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('tool.call', async () => ({ result: 'ok', text: 'ok' }) as never)
+
+  return { rec, clock }
+}
+
+export async function startSession($: Engine): Promise<void> {
+  await $.session.start({ cwd: '/work/my-project' } as never)
+}
+
+export function paneProps(cols: number, rows: number, placement: 'dock' | 'inline' = 'dock') {
+  return {
+    title: 'Mascot Studio MX · my-project.fla',
+    isFocused: true,
+    bodyColumns: cols,
+    placement,
+    scroll: { offset: 0, bodyRows: rows },
+  }
+}
+
+export async function mountPane($: Engine, cols = 46, rows = 30, placement: 'dock' | 'inline' = 'dock') {
+  return $.ui.mount({
+    plugin: PLUGIN,
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: PANE,
+    props: paneProps(cols, rows, placement) as never,
+    viewport: { columns: cols, rows, isFullscreen: placement === 'dock' } as never,
+  })
+}

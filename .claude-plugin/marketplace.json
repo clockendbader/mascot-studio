@@ -1,0 +1,11 @@
+{
+  "name": "mascot-studio",
+  "owner": { "name": "clockendbader" },
+  "plugins": [
+    {
+      "name": "mascot-studio",
+      "source": "./plugins/mascot-studio",
+      "description": "A 2000s animation studio in your terminal: a pixel cat acts out what Claude is doing."
+    }
+  ]
+}

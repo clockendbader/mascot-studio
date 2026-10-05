@@ -1,0 +1,28 @@
+{
+  "name": "mascot-studio",
+  "version": "0.1.0",
+  "description": "A 2000s animation studio in your terminal: a pixel cat acts out what Claude is doing.",
+  "author": { "name": "clockendbader" },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "openOnStartup": {
+      "type": "boolean",
+      "title": "Open on startup",
+      "description": "Open the studio when a session starts",
+      "default": true
+    },
+    "sound": {
+      "type": "boolean",
+      "title": "Sound panel",
+      "description": "Show what's playing and control it; off runs no helper and reads no media",
+      "default": true
+    },
+    "screensaverMinutes": {
+      "type": "number",
+      "title": "Screensaver minutes",
+      "description": "Idle minutes before the screensaver; 0 turns it off",
+      "default": 5
+    }
+  }
+}
