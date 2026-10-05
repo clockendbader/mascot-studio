@@ -73,5 +73,5 @@ export function channel<T>() {
       yield value
     }
   }
-  return { push: (value: T) => push(value), end: () => push(null), read }
+  return { push: (value: T) => push(value), end: () => push(null), read, pending: () => queue.length }
 }

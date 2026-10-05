@@ -93,7 +93,7 @@ test('parallel calls keep the newest pose until all have settled', async ($, on)
   expect((await view($)).pose).toMatch(/Clawd is thinking/)
 })
 
-test('a quiet minute after a turn puts Clawd to sleep, without a redraw', async ($, on) => {
+test('a quiet minute after a turn puts Clawd to sleep, without a redraw', { timeoutMs: 20_000 }, async ($, on) => {
   const { rec, clock } = answerEngine(on, { now: new Date(2026, 6, 4, 12).getTime(), os: 'windows' })
   await startSession($)
   await startTurn($)

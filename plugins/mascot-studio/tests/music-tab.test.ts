@@ -7,7 +7,7 @@ import { parseAppleScript } from '../hooks/sound/macos'
 import type { RowSegment } from '../hooks/client/row'
 import { THEMES } from '../hooks/themes'
 import { answerEngine, mountPane, startSession, waitFor } from './harness'
-import type { ProcResult } from './harness'
+import type { ProcResult, Recorder } from './harness'
 import { channel } from './fakes'
 import { decode } from './cells'
 
@@ -105,11 +105,18 @@ const spawnFrom = (lines: ReturnType<typeof channel<string>>) => () =>
     for await (const t of lines.read()) yield { stream: 'stdout' as const, text: t }
   })()
 
-async function musicTab($: Engine, clock: MockClock, lines: ReturnType<typeof channel<string>>, rows = 24) {
+/** Lets the plugin take what is under way a few steps further (waitFor's 200 settles are slow while the player stream is open). */
+async function settle(clock: MockClock): Promise<void> {
+  for (let i = 0; i < 8; i++) await clock.settle()
+}
+
+/** Starts a session, feeds the player one line and opens the Music tab once the helper has read it. */
+async function musicTab($: Engine, clock: MockClock, rec: Recorder, lines: ReturnType<typeof channel<string>>, rows = 24, line = SONG) {
   await startSession($)
-  await waitFor(clock, () => false)
-  lines.push(SONG)
-  await waitFor(clock, () => false)
+  await waitFor(clock, () => rec.spawns.length > 0)
+  lines.push(line)
+  await waitFor(clock, () => lines.pending() === 0)
+  await settle(clock)
   await $.command.run({ command: 'studio', args: 'music' } as never)
   return mountPane($, 46, rows)
 }
@@ -128,8 +135,8 @@ async function click(ui: Mounted, key: string, id: string): Promise<void> {
 
 test('the Music tab shows the song, the DJ blob, progress and controls', async ($, on) => {
   const lines = channel<string>()
-  const { clock } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
-  const ui = await musicTab($, clock, lines)
+  const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
+  const ui = await musicTab($, clock, rec, lines)
   expect(await ui.find({ type: 'Text', text: /One More Time/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Daft Punk/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Now playing · Spotify/ })).toBeDefined()
@@ -140,8 +147,8 @@ test('the Music tab shows the song, the DJ blob, progress and controls', async (
 
 test('a short pane drops the DJ blob but keeps progress and controls', async ($, on) => {
   const lines = channel<string>()
-  const { clock } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
-  const ui = await musicTab($, clock, lines, 21)
+  const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
+  const ui = await musicTab($, clock, rec, lines, 21)
   expect(await ui.find({ key: 'dj' })).toBeUndefined()
   expect(await ui.find({ key: 'progress' })).toBeDefined()
   expect(await ui.find({ key: 'music-controls' })).toBeDefined()
@@ -151,7 +158,7 @@ test('a short pane drops the DJ blob but keeps progress and controls', async ($,
 test('clicking skip runs playerctl next; /studio play and back drive the player', async ($, on) => {
   const lines = channel<string>()
   const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
-  const ui = await musicTab($, clock, lines)
+  const ui = await musicTab($, clock, rec, lines)
   await click(ui, 'music-controls', 'skip')
   await waitFor(clock, () => rec.runs.some(argv => argv[1] === 'next'))
   expect(rec.runs).toContainEqual(['playerctl', 'next'])
@@ -164,7 +171,7 @@ test('clicking skip runs playerctl next; /studio play and back drive the player'
 test('a failed control says it could not reach the player', async ($, on) => {
   const lines = channel<string>()
   const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(1), spawn: spawnFrom(lines) })
-  const ui = await musicTab($, clock, lines)
+  const ui = await musicTab($, clock, rec, lines)
   await click(ui, 'music-controls', 'skip')
   await waitFor(clock, () => rec.toasts.length > 0)
   expect(rec.toasts).toContain("Couldn't reach Spotify")
@@ -173,13 +180,8 @@ test('a failed control says it could not reach the player', async ($, on) => {
 
 test('with nothing playing the tab says so and offers no controls', async ($, on) => {
   const lines = channel<string>()
-  const { clock } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
-  await startSession($)
-  await waitFor(clock, () => false)
-  lines.push('\n')
-  await waitFor(clock, () => false)
-  await $.command.run({ command: 'studio', args: 'music' } as never)
-  const ui = await mountPane($, 46, 24)
+  const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
+  const ui = await musicTab($, clock, rec, lines, 24, '\n')
   expect(await ui.find({ type: 'Text', text: /No music playing/ })).toBeDefined()
   expect(await ui.find({ key: 'dj' })).toBeDefined()
   expect(await ui.find({ key: 'music-controls' })).toBeUndefined()
@@ -197,8 +199,8 @@ test('with sound off the tab says how to turn it on and nothing runs', { options
 
 test('every Music tab text sets its colour', async ($, on) => {
   const lines = channel<string>()
-  const { clock } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
-  const ui = await musicTab($, clock, lines)
+  const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun(), spawn: spawnFrom(lines) })
+  const ui = await musicTab($, clock, rec, lines)
   let texts = 0
   const walk = (n: unknown): void => {
     if (typeof n !== 'object' || n === null) return

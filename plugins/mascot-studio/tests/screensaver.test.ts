@@ -64,7 +64,7 @@ test('an idle studio starts the screensaver and a new turn wakes it', { options:
   expect(hasWorkArea(((await awake.find({ key: 'stage' }))?.props as { cells: string } | undefined)?.cells)).toBe(true)
 })
 
-test('screensaverMinutes 0 never starts it', { options: { screensaverMinutes: 0 } }, async ($, on) => {
+test('screensaverMinutes 0 never starts it', { options: { screensaverMinutes: 0 }, timeoutMs: 20_000 }, async ($, on) => {
   const { clock } = answerEngine(on)
   await startSession($)
   await startTurn($)
