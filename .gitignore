@@ -5,3 +5,5 @@ Thumbs.db
 .smoke/
 .live/
 .demo/
+# written by Claude Code when it loads the plugin; it extends the generated types above
+plugins/mascot-studio/tsconfig.json
