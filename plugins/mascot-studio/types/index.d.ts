@@ -15,6 +15,18 @@ export type Keyframe = {
 export type MiniMood = 'relaxed' | 'squint' | 'sweat' | 'flat' | 'asleep'
 export type Activity = { pose: Pose; tool?: string; target?: string; since: number }
 export type Scene = 1 | 2
+export type RateLimitView = { kind: string; percentUsed: number; resetsAt?: string }
+export type UsageSnapshot = {
+  contextPercent?: number
+  contextTokens?: number
+  rateLimits: RateLimitView[]
+  costUsd?: number
+  toolCalls: number
+}
+export type Dialog =
+  | { kind: 'error'; tool: string; line: string; at: number }
+  | { kind: 'needs-you'; text: string; at: number }
+  | null
 
 declare module 'claude-code' {
   interface PluginState {
