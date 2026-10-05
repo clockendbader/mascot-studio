@@ -39,6 +39,9 @@ declare module 'claude-code' {
       turnStartedAt: number | null
       idleSince: number | null
       turns: number
+      usage: UsageSnapshot
+      contextHistory: number[]
+      dialog: Dialog
     }
   }
 }

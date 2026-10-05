@@ -4,6 +4,8 @@ import type { Activity, Keyframe, Pose, Scene } from '../../types'
 import { truncateMiddle } from '../activity'
 import type { RasterFrame } from '../animator'
 import type { Layout } from '../layout'
+import { taskManagerView } from './taskManager'
+import type { TaskManagerVM } from './taskManager'
 import { timelineView } from './timeline'
 import type { TimelineActions } from './timeline'
 
@@ -21,6 +23,7 @@ export type StudioVM = {
   elapsed: string
   visitors: number | null
   frames: Readonly<Partial<Record<string, RasterFrame>>>
+  tm?: TaskManagerVM
 }
 
 export type StudioActions = TimelineActions & {
@@ -126,8 +129,8 @@ export function studioView(els: Els, vm: StudioVM, act: StudioActions) {
         </Box>
       ) : (
         <Box key="stage-section" flexDirection="column">
-          {separator(els, 'Stage · Scene 2', cols)}
-          <Text>Task Manager</Text>
+          {separator(els, 'Stage · Scene 2: Task Manager', cols)}
+          {vm.tm === undefined ? null : taskManagerView(els, vm.tm, vm.frames)}
         </Box>
       )}
       <Box key="properties-section" flexDirection="column">

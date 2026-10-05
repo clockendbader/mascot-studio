@@ -1,12 +1,16 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, Keyframe, Opener, Scene } from '../types'
+import type { Activity, Dialog, Keyframe, Opener, Scene, UsageSnapshot } from '../types'
 import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
 import { rasterFrames } from './animator'
 import type { AnimModel, RasterKey } from './animator'
 import { formatElapsed, hatFor } from './calendar'
+import { statusLine } from './alerts'
 import { layoutFor } from './layout'
+import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
+import type { RawUsage } from './usage'
+import { taskManagerSizes } from './views/taskManager'
 import { studioView } from './views/studio'
 
 const PANE = 'mascot-studio'
@@ -21,6 +25,9 @@ const scene = atom({ plugin: 'mascot-studio', key: 'scene' } as const, 1 as Scen
 const turnStartedAt = atom({ plugin: 'mascot-studio', key: 'turnStartedAt' } as const, null as number | null)
 const idleSince = atom({ plugin: 'mascot-studio', key: 'idleSince' } as const, null as number | null)
 const turns = atom({ plugin: 'mascot-studio', key: 'turns' } as const, 0)
+const usage = atom({ plugin: 'mascot-studio', key: 'usage' } as const, { rateLimits: [], toolCalls: 0 } as UsageSnapshot)
+const contextHistory = atom({ plugin: 'mascot-studio', key: 'contextHistory' } as const, [] as number[])
+const dialog = atom({ plugin: 'mascot-studio', key: 'dialog' } as const, null as Dialog)
 
 /** The cwd's last path segment, for the pane title. */
 let folder = 'untitled'
@@ -35,6 +42,23 @@ let isClosingStartup = false
 const TERMINAL_ONLY = 'Mascot Studio runs in the terminal for now.'
 const STARTUP_HINT = 'Mascot Studio: type /studio to open it.'
 const paneTitle = () => `Mascot Studio MX · ${folder}.fla`
+const HISTORY_MAX = 120
+/** The status line as last set, so it is only set again when it changes. */
+let lastStatus: string | undefined
+
+/** Sets the plugin's status line from the dialog and the usage warning, when the text changed. */
+async function refreshStatus($: EngineInterface): Promise<void> {
+  const text = statusLine(await read($, dialog), usageWarning(await read($, usage), new Date(await $.clock.now())))
+  if (text === lastStatus) return
+  lastStatus = text
+  $.ui.status(text)
+}
+
+/** Takes the engine's usage figures, if they look like figures. */
+function isRawUsage(value: unknown): value is RawUsage {
+  const v = value as { context?: unknown; rateLimits?: unknown } | null
+  return typeof v === 'object' && v !== null && typeof v.context === 'object' && Array.isArray(v.rateLimits)
+}
 
 function folderOf(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(part => part !== '')
@@ -67,6 +91,16 @@ export const register: Register = (on, options) => {
     $.clock.every(TICK_MS, () => {
       void animate().catch(() => undefined)
     })
+    try {
+      const figures: unknown = await $.session.usage()
+      if (isRawUsage(figures)) {
+        const calls = (await read($, keyframes)).at(-1)?.n ?? 0
+        await update($, usage, () => snapshotFrom(figures, calls))
+        await refreshStatus($)
+      }
+    } catch {
+      // no figures yet; session.measure brings them
+    }
     const hasTerminal = (await $.session.surfaces()).includes('terminal')
     if (options.openOnStartup !== false && hasTerminal) {
       await update($, opener, () => 'startup' as Opener)
@@ -145,6 +179,8 @@ export const register: Register = (on, options) => {
       await update($, activity, () => ({ pose: 'hop', since: now }) as Activity)
       await update($, turns, n => n + 1)
       await update($, turnStartedAt, () => null)
+      const pct = (await read($, usage)).contextPercent
+      await update($, contextHistory, list => pushHistory(list, pct, HISTORY_MAX))
       $.clock.after(HOP_MS, () => {
         void (async () => {
           if ((await read($, turnStartedAt)) !== null) return
@@ -158,6 +194,17 @@ export const register: Register = (on, options) => {
       // observing only
     }
     return result
+  }).catch(($, e, next) => next(e))
+
+  on('session.measure', async ($, e, next) => {
+    try {
+      const calls = (await read($, keyframes)).at(-1)?.n ?? 0
+      await update($, usage, () => snapshotFrom(e, calls))
+      await refreshStatus($)
+    } catch {
+      // observing only
+    }
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -189,10 +236,25 @@ export const register: Register = (on, options) => {
     const selected = await read($, selectedFrame)
     const sc = await read($, scene)
     const startedAt = await read($, turnStartedAt)
+    const figures = await read($, usage)
+    const history = await read($, contextHistory)
+    const quietSince = await read($, idleSince)
+    const turnCount = await read($, turns)
     const layout = layoutFor(cols, rows, sc, false)
+    const current = frames.at(-1)?.n ?? 0
 
-    const model: AnimModel =
-      layout.tooNarrow || sc !== 1 ? {} : { stage: { cols, pose: act.pose, hat: hatFor(new Date(at)), screensaver: null } }
+    const model: AnimModel = {}
+    if (!layout.tooNarrow && sc === 1) model.stage = { cols, pose: act.pose, hat: hatFor(new Date(at)), screensaver: null }
+    if (!layout.tooNarrow && sc === 2) {
+      model.tm = {
+        ...taskManagerSizes(cols),
+        samples: history,
+        ...(figures.contextPercent !== undefined ? { pct: figures.contextPercent } : {}),
+        ...(highestPercent(figures) !== undefined ? { highest: highestPercent(figures) } : {}),
+        idleSince: quietSince,
+        title: 'Task Manager',
+      }
+    }
     const rasters = rasterFrames(model, tick, at)
     drawn = { model, mounted: new Set(rasters.map(frame => frame.key)) }
 
@@ -204,12 +266,26 @@ export const register: Register = (on, options) => {
         scene: sc,
         keyframes: frames,
         soundFrames: [],
-        current: frames.at(-1)?.n ?? 0,
+        current,
         selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
         activity: act,
         elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
         visitors: null,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
+        ...(sc === 2
+          ? {
+              tm: {
+                cols,
+                boxes: layout.tmBoxes,
+                ...(figures.contextPercent !== undefined ? { pct: figures.contextPercent } : {}),
+                limits: limitsView(figures, new Date(at)),
+                costLabel: costLabel(figures),
+                ...(figures.costUsd !== undefined ? { costUsd: figures.costUsd } : {}),
+                turns: turnCount,
+                toolCalls: current,
+              },
+            }
+          : {}),
       },
       {
         selectFrame: n => void update($, selectedFrame, () => n),

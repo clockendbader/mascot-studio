@@ -56,7 +56,10 @@ async function* noOutput(): AsyncIterable<Piece> {}
  * Stands beneath the plugin as the engine: answers every call the plugin
  * makes on `$` and records what it asked for.
  */
-export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; clock: MockClock } {
+export type Control = { usage: unknown; usageDeny?: string }
+
+export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; clock: MockClock; ctl: Control } {
+  const ctl: Control = { usage: opts.usage ?? DEFAULT_USAGE }
   const rec: Recorder = { opened: [], closed: [], statuses: [], toasts: [], blits: [], runs: [], spawns: [] }
   const open = new Map<string, string>()
   const clock = mock.clock(on, { now: opts.now ?? DEFAULT_NOW })
@@ -64,7 +67,8 @@ export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; c
   mock.store(on, opts.store ?? {})
 
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  on('session.usage', async () => ({ value: opts.usage ?? DEFAULT_USAGE }) as never)
+  on('session.usage', async () => (ctl.usageDeny !== undefined ? { deny: ctl.usageDeny } : { value: ctl.usage }) as never)
+  on('session.measure', async (_$, e) => ({ changed: e.changed }) as never)
   on('session.surfaces', async () => ({ value: opts.surfaces ?? ['terminal'] }) as never)
   on('command.register', async () => ({ value: undefined }) as never)
   on('ui.open', async (_$, e) => {
@@ -109,7 +113,7 @@ export function answerEngine(on: On, opts: BootOptions = {}): { rec: Recorder; c
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
   on('tool.call', async (_$, e) => (opts.tool ? await opts.tool(e as never) : { result: 'ok', text: 'ok' }) as never)
 
-  return { rec, clock }
+  return { rec, clock, ctl }
 }
 
 export async function startSession($: Engine): Promise<void> {
@@ -151,4 +155,13 @@ export async function waitFor(clock: MockClock, done: () => boolean): Promise<vo
     await clock.settle()
     await Promise.resolve()
   }
+}
+
+export async function measure($: Engine, figures: { percent?: number; rateLimits?: unknown[]; usd?: number }): Promise<void> {
+  await $.session.measure({
+    context: { window: 200000, ...(figures.percent !== undefined ? { percent: figures.percent, tokens: figures.percent * 2000 } : {}) },
+    rateLimits: figures.rateLimits ?? [],
+    ...(figures.usd !== undefined ? { cost: { usd: figures.usd } } : {}),
+    changed: ['context'],
+  } as never)
 }
