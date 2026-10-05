@@ -1,4 +1,5 @@
 export type Opener = 'startup' | 'person' | null
+export type ThemeName = 'windows7' | 'macos' | 'ubuntu'
 export type Hat = 'beanie' | 'pumpkin' | 'santa' | 'party' | 'heart'
 export type Pose = 'thinking' | 'magnify' | 'tablet' | 'keyboard' | 'browser' | 'helper' | 'facepalm' | 'wave' | 'hop' | 'asleep'
 export type Keyframe = {

@@ -19,7 +19,7 @@ export type Recorder = {
 }
 
 export type BootOptions = {
-  os?: 'windows' | 'macos' | 'linux'
+  os?: 'windows' | 'macos' | 'linux' | 'other'
   usage?: unknown
   run?: (argv: string[]) => ProcResult
   spawn?: (argv: string[]) => AsyncIterable<Piece>
@@ -43,7 +43,7 @@ export const DEFAULT_USAGE = {
   cost: { usd: 0.84 },
 }
 
-const UNAME: Record<string, string> = { macos: 'Darwin\n', linux: 'Linux\n' }
+const UNAME: Record<string, string> = { macos: 'Darwin\n', linux: 'Linux\n', other: 'FreeBSD\n' }
 
 function defaultRun(os: BootOptions['os'], argv: string[]): ProcResult {
   if (argv[0] === 'uname' && os !== undefined && os !== 'windows') {

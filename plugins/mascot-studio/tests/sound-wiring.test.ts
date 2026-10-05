@@ -86,7 +86,7 @@ test('sound off runs nothing and draws no panel', { options: { sound: false } },
   const { clock, rec } = answerEngine(on, { os: 'linux', run: linuxRun() })
   await startSession($)
   await settle(clock)
-  expect(rec.runs).toEqual([])
+  expect(rec.runs).toEqual([['uname', '-s']])
   expect(rec.spawns).toEqual([])
   const ui = await mountPane($, 46, 32)
   expect(await ui.find({ type: 'Text', text: /MascotAmp/ })).toBeUndefined()

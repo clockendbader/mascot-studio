@@ -16,6 +16,7 @@ import { marqueeOf } from './views/mascotAmp'
 import { linuxBackend } from './sound/linux'
 import { macosBackend } from './sound/macos'
 import { detectOs } from './sound/platform'
+import type { Os } from './sound/platform'
 import type { Piece, SoundBackend, SoundHost } from './sound/types'
 import { windowsBackend } from './sound/windows'
 import { studioView } from './views/studio'
@@ -72,6 +73,8 @@ const MAX_SOUND_FRAMES = 200
 let soundBackend: SoundBackend | null = null
 let soundHost: SoundHost | null = null
 let stopSound: (() => void) | null = null
+/** The OS this session runs on, detected at start; picks the auto theme and the sound backend. */
+let osName: Os = 'other'
 /** The decorative spectrum's bars, walked each tick. */
 let vizHeights: number[] = []
 
@@ -208,6 +211,7 @@ export const register: Register = (on, options) => {
     } catch {
       // no figures yet; session.measure brings them
     }
+    osName = await detectOs(await $.env.get('OS'), async () => (await $.process.run(['uname', '-s'])).stdout).catch(() => 'other' as Os)
     if (options.sound !== false) {
       now = await $.clock.now()
       soundHost = {
@@ -217,8 +221,7 @@ export const register: Register = (on, options) => {
         after: (ms, fn) => $.clock.after(ms, fn),
         now: () => now,
       }
-      const os = await detectOs(await $.env.get('OS'), async () => (await $.process.run(['uname', '-s'])).stdout)
-      soundBackend = os === 'windows' ? windowsBackend : os === 'macos' ? macosBackend : os === 'linux' ? linuxBackend : null
+      soundBackend = osName === 'windows' ? windowsBackend : osName === 'macos' ? macosBackend : osName === 'linux' ? linuxBackend : null
       watchSound($)
     }
     const hasTerminal = (await $.session.surfaces()).includes('terminal')
