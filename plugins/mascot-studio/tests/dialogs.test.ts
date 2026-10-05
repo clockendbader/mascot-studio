@@ -65,7 +65,7 @@ describe('error dialog', () => {
       await failed($, clock)
       const v = await view($)
       const box = v.dialog?.props as { top?: number; backgroundColor?: string; borderColor?: string } | undefined
-      expect(box?.top).toBe(name === 'macos' ? 0 : 3)
+      expect(box?.top).toBe(name === 'macos' ? 0 : 6)
       expect(box?.backgroundColor).toBe(theme.dialog.body)
       expect((await v.ui.find({ type: 'Text', text: /Mascot Programming/ }))?.props).toMatchObject({ color: theme.dialog.titleText, backgroundColor: theme.dialog.title })
       expect((await v.ui.find({ type: 'Text', text: /Read failed/ }))?.props).toMatchObject({ color: theme.dialog.text })

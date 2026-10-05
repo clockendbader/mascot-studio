@@ -9,15 +9,15 @@ type Els = Elements['terminal']
 type Tree = ReturnType<Els['Box']>
 
 const MAX_WIDTH = 40
-/** Rows from the top of the Stage: a window floats below the top; a Mac sheet drops from the title chrome. */
-const WINDOW_TOP = 3
+/** Rows from the top of the Stage: a window sits low, so Clawd's face and arms stay in view; a Mac sheet drops from the title chrome. */
+const WINDOW_TOP = 6
 
 /** The dialog's outer width, border included, in a pane `cols` wide. */
 export function dialogWidth(cols: number): number {
   return Math.max(20, Math.min(cols - 4, MAX_WIDTH))
 }
 
-/** The OK button row inside the error dialog's border, the button centred (key Enter or o). */
+/** The OK button row inside the error dialog's border, the button centred (key o). */
 export function okSegments(theme: Theme, cols: number): RowSegment[] {
   const inner = dialogWidth(cols) - 2
   const { body, text, button } = theme.dialog

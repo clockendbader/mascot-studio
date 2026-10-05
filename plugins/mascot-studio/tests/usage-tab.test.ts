@@ -63,8 +63,9 @@ test('a refused startup read leaves the tab working until a measure arrives', as
 test('a bar turns the warning colour at 85%', async ($, on) => {
   const { clock } = answerEngine(on, { usage: { ...PLAN, context: { tokens: 170000, window: 200000, percent: 85 } }, os: 'windows' })
   const ui = await usageTab($, clock)
-  const lit = (await ui.findAll({ type: 'Text', text: /^█+$/ }))[0]
+  const [lit, track] = await ui.findAll({ type: 'Text', text: /^▆+$/ })
   expect(lit?.props.color).toBe(THEMES.windows7.levels.warn)
+  expect(track?.props.color).toBe(THEMES.windows7.status.bg)
 })
 
 test('details swaps the graph for token counts and reset dates', async ($, on) => {

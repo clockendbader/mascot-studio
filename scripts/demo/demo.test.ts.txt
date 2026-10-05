@@ -1,0 +1,229 @@
+// Records the README demo: each test is one scene, and every frame is printed
+// as a `FRAME <json>` line for scripts/demo/render.py. scripts/make-demo.sh
+// copies this file into a scratch copy of the plugin as a test and runs it.
+import { test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import { answerEngine, completeTurn, mountPane, startSession, startTurn, waitFor } from './harness'
+
+type Node = { type: string; props?: Record<string, unknown>; children?: unknown[] }
+type Mounted = Awaited<ReturnType<typeof mountPane>>
+
+const COLS = 46
+const ROWS = 24
+/** A day with no holiday hat; the Ubuntu scene uses October for the pumpkin. */
+const JUNE = new Date(2026, 5, 10, 14, 30).getTime()
+const OCTOBER = new Date(2026, 9, 5, 14, 30).getTime()
+const OK = { result: 'ok', text: 'ok' }
+const NPM_FAIL = { result: null, text: 'npm ERR! 3 tests failed (see above)', isError: true }
+const PLAN = {
+  startedAt: 0,
+  context: { tokens: 84_000, window: 200_000, percent: 42 },
+  rateLimits: [
+    { kind: 'five_hour', percentUsed: 31, resetsAt: new Date(2026, 5, 10, 17, 10).toISOString() },
+    { kind: 'seven_day', percentUsed: 18, resetsAt: new Date(2026, 5, 15, 9, 0).toISOString() },
+  ],
+  cost: { usd: 0.84 },
+}
+const SONG = '{"app":"Spotify.exe","title":"Midnight Commit","artist":"The Linters","status":"Playing","position":72.4,"duration":224}\n'
+
+/** Tool calls stay open until the scene settles them, so a pose holds while frames are taken. */
+function engine(on: Parameters<typeof answerEngine>[0], opts: Parameters<typeof answerEngine>[1] = {}) {
+  const open = new Map<string, (answer: unknown) => void>()
+  const calls: Promise<unknown>[] = []
+  const booted = answerEngine(on, { now: JUNE, usage: PLAN, ...opts, tool: e => new Promise(resolve => open.set(e.tool_use_id ?? '', resolve)) })
+  return { ...booted, open, calls }
+}
+
+/** Ends the music scene's player helper. */
+let endSong: (() => void) | undefined
+
+type Scene = ReturnType<typeof engine> & { $: Engine }
+
+/** Lets pending work run a little. (waitFor's 200 settles are slow while a call is in flight.) */
+async function calm(s: { clock: Scene['clock'] }): Promise<void> {
+  for (let i = 0; i < 4; i++) await s.clock.settle()
+}
+
+let callNo = 0
+
+/** Starts a tool call and leaves it running. */
+async function begin(s: Scene, args: Record<string, unknown>): Promise<{ id: string; done: Promise<unknown> }> {
+  const id = `u${++callNo}`
+  const done = s.$.tool.call({ ...args, tool_use_id: id } as never)
+  s.calls.push(done)
+  await waitFor(s.clock, () => s.open.has(id))
+  return { id, done }
+}
+
+/** Settles a running call with this answer. */
+async function settle(s: Scene, call: { id: string; done: Promise<unknown> }, answer: unknown = OK): Promise<void> {
+  s.open.get(call.id)?.(answer)
+  s.open.delete(call.id)
+  await call.done
+  await calm(s)
+}
+
+/** One whole call that took `ms`. */
+async function step(s: Scene, args: Record<string, unknown>, ms: number, answer: unknown = OK): Promise<void> {
+  const call = await begin(s, args)
+  await s.clock.advance(ms)
+  await settle(s, call, answer)
+}
+
+/** A turn's worth of history, so the film strip has clips. */
+async function history(s: Scene): Promise<void> {
+  await startTurn(s.$)
+  await step(s, { tool: 'Read', file_path: '/work/shop/README.md' }, 400)
+  await step(s, { tool: 'Grep', pattern: 'TODO', path: '/work/shop/src' }, 300)
+  await step(s, { tool: 'Read', file_path: '/work/shop/src/cart.ts' }, 500)
+  await step(s, { tool: 'Edit', file_path: '/work/shop/src/cart.ts' }, 900)
+  await step(s, { tool: 'Bash', command: 'npm test' }, 2400)
+  await step(s, { tool: 'WebFetch', url: 'https://example.com/docs/cart' }, 1200)
+}
+
+/** Replaces each Client with what its surface module drew, sized as the Client. */
+async function inline(ui: Mounted, node: unknown): Promise<unknown> {
+  if (typeof node !== 'object' || node === null) return node
+  const n = node as Node
+  if (n.type === 'Client') {
+    const key = String(n.props?.key ?? '')
+    const drawn = await ui.drawn({ in: key })
+    return { type: 'ClientBox', props: { key, width: n.props?.width, height: n.props?.height }, children: [drawn] }
+  }
+  const children = []
+  for (const child of n.children ?? []) children.push(await inline(ui, child))
+  return { ...n, children }
+}
+
+/** Takes `count` frames, a tick apart, each printed as one FRAME line. */
+async function frames(s: Scene & { ui: Mounted }, caption: string, theme: string, count = 10): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await s.clock.advance(166)
+    await calm(s)
+    const tree = await inline(s.ui, await s.ui.drawn())
+    const rasters: Record<string, string> = {}
+    for (const blit of s.rec.blits) rasters[blit.key] = blit.cells
+    console.log(`FRAME ${JSON.stringify({ caption, theme, tree, rasters })}`)
+  }
+  await finish(s)
+}
+
+/** Settles every call still running and ends the player helper, so the scene ends cleanly. */
+async function finish(s: Scene): Promise<void> {
+  for (const resolve of s.open.values()) resolve(OK)
+  s.open.clear()
+  endSong?.()
+  endSong = undefined
+  await Promise.all(s.calls)
+  await calm(s)
+}
+
+async function open(s: Scene, tab = 'timeline'): Promise<Scene & { ui: Mounted }> {
+  await s.$.command.run({ command: 'studio', args: tab } as never)
+  const ui = await mountPane(s.$, COLS, ROWS)
+  s.rec.blits.length = 0
+  return { ...s, ui }
+}
+
+async function boot($: Engine, on: Parameters<typeof answerEngine>[0], opts: Parameters<typeof answerEngine>[1] = {}): Promise<Scene> {
+  const s = { ...engine(on, { os: 'windows', ...opts }), $ }
+  await startSession($)
+  await calm(s)
+  return s
+}
+
+test('1 coding', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await begin(s, { tool: 'Edit', file_path: '/work/shop/src/checkout.ts' })
+  await frames(await open(s), 'Claude edits a file: Clawd codes on the laptop', 'windows7', 12)
+})
+
+test('2 reading', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await begin(s, { tool: 'Read', file_path: '/work/shop/src/payment.ts' })
+  await frames(await open(s), 'Reading a file', 'windows7')
+})
+
+test('3 terminal', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await begin(s, { tool: 'Bash', command: 'npm run build' })
+  await frames(await open(s), 'Running a command in the terminal', 'windows7')
+})
+
+test('4 oops', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await step(s, { tool: 'Bash', command: 'npm test' }, 1800, NPM_FAIL)
+  await frames(await open(s), 'A tool fails: oops, and a themed error box', 'windows7', 12)
+})
+
+test('5 thinking', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await frames(await open(s), 'Between steps Clawd thinks and scratches its head', 'windows7', 12)
+})
+
+test('6 done', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  const shown = await open(s)
+  await completeTurn($)
+  await frames(shown, 'The turn is done: a little hop, then a rest', 'windows7', 8)
+})
+
+test('7 usage', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await completeTurn($)
+  await s.clock.advance(1000)
+  await frames(await open(s, 'usage'), 'Usage tab: context and plan limits at a glance', 'windows7', 8)
+})
+
+test('8 music', async ($, on) => {
+  const s = await boot($, on, {
+    spawn: () =>
+      (async function* () {
+        yield { stream: 'stdout' as const, text: SONG }
+        await new Promise<void>(resolve => (endSong = resolve))
+      })(),
+  })
+  await history(s)
+  await calm(s)
+  await frames(await open(s, 'music'), 'Music tab: what is playing, live progress, controls', 'windows7', 12)
+})
+
+test('9 waving', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await begin(s, { tool: 'Bash', command: 'git push' })
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'git push' } } as never)
+  await frames(await open(s), 'Claude needs your OK: Clawd waves you over', 'windows7', 12)
+})
+
+test('10 macos', { options: { theme: 'macos' } }, async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await begin(s, { tool: 'Edit', file_path: '/work/shop/src/checkout.ts' })
+  await frames(await open(s), 'Mac OS X theme', 'macos', 10)
+})
+
+test('11 ubuntu', { options: { theme: 'ubuntu' } }, async ($, on) => {
+  const s = await boot($, on, { now: OCTOBER })
+  await history(s)
+  await begin(s, { tool: 'WebSearch', query: 'pumpkin spice css' })
+  await frames(await open(s), 'Ubuntu theme (and an October pumpkin hat)', 'ubuntu', 10)
+})
+
+test('12 inspect', async ($, on) => {
+  const s = await boot($, on)
+  await history(s)
+  await completeTurn($)
+  await s.clock.advance(1000)
+  const shown = await open(s)
+  await shown.ui.pointer({ type: 'down', x: 7, y: 0, button: 'left', in: 'filmstrip' })
+  await calm(s)
+  await frames(shown, 'Click a clip to inspect that step', 'windows7', 10)
+})

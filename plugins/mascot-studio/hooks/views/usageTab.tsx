@@ -20,6 +20,7 @@ export type UsageTabVM = {
   now: Date
 }
 
+const BAR = '▆'
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const thousands = (n: number) => `${Math.round(n / 1000)}k`
 
@@ -45,8 +46,9 @@ function bar(els: Els, vm: UsageTabVM, label: string, pct: number | undefined, e
   return (
     <Box flexDirection="row">
       <Text color={theme.ink}>{` ${label.padEnd(8)}`}</Text>
-      {lit > 0 ? <Text color={theme.levels[level(pct)]}>{'█'.repeat(lit)}</Text> : null}
-      <Text color={theme.soft}>{'░'.repeat(cells - lit)}</Text>
+      {/* three-quarter blocks, so the three bars stand apart instead of touching */}
+      {lit > 0 ? <Text color={theme.levels[level(pct)]}>{BAR.repeat(lit)}</Text> : null}
+      <Text color={theme.status.bg}>{BAR.repeat(cells - lit)}</Text>
       <Text color={theme.ink} bold>
         {pct === undefined ? ' —' : ` ${pct}%`}
       </Text>
