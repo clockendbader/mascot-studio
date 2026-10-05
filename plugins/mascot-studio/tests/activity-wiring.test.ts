@@ -2,11 +2,13 @@ import { test, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { answerEngine, completeTurn, mountPane, startSession, startTurn, waitFor } from './harness'
 
-async function line($: Engine): Promise<string> {
+async function view($: Engine) {
   const ui = await mountPane($)
-  const text = (await ui.find({ type: 'Text', text: 'pose=' }))?.text ?? ''
-  await ui.unmount()
-  return text
+  const pose = (await ui.find({ type: 'Text', text: /Pose/ }))?.text ?? ''
+  const keyframes = (await ui.findAll({ type: 'Button', text: '●' })).length
+  const errors = (await ui.findAll({ type: 'Button', text: '✖' })).length
+  const isStudio = (await ui.find({ key: 'stage' })) !== undefined
+  return { ui, pose, keyframes, errors, isStudio }
 }
 
 test('a tool call passes through unchanged', async ($, on) => {
@@ -21,15 +23,21 @@ test('tool calls add keyframes and the pose returns to thinking', async ($, on) 
   await startTurn($)
   await $.tool.call({ tool: 'Read', tool_use_id: 'u1', file_path: '/a.ts' } as never)
   await $.tool.call({ tool: 'Bash', tool_use_id: 'u2', command: 'ls' } as never)
-  expect(await line($)).toMatch(/pose=thinking frames=2 scene=1/)
+  const v = await view($)
+  expect(v.pose).toMatch(/Pose\s+thinking/)
+  expect(v.keyframes).toBe(2)
+  expect(v.isStudio).toBe(true)
 })
 
-test('a failed call records its first error line', async ($, on) => {
+test('a failed call shows its keyframe as ✖ with its first error line', async ($, on) => {
   answerEngine(on, { tool: () => ({ result: null, text: 'boom\nstack', isError: true }) })
   await startSession($)
   await startTurn($)
   await $.tool.call({ tool: 'Bash', tool_use_id: 'u1', command: 'x' } as never)
-  expect(await line($)).toMatch(/err=boom$/)
+  const v = await view($)
+  expect(v.errors).toBe(1)
+  await v.ui.press({ key: 'kf-1' })
+  expect(await v.ui.find({ type: 'Text', text: /✖.*boom/ })).toBeDefined()
 })
 
 test('a finished turn hops, then switches to Scene 2 asleep', async ($, on) => {
@@ -37,9 +45,14 @@ test('a finished turn hops, then switches to Scene 2 asleep', async ($, on) => {
   await startSession($)
   await startTurn($)
   await completeTurn($)
-  expect(await line($)).toMatch(/pose=hop .*scene=1/)
+  const hop = await view($)
+  expect(hop.pose).toMatch(/Pose\s+export movie/)
+  expect(hop.isStudio).toBe(true)
+  await hop.ui.unmount()
   await clock.advance(1500)
-  expect(await line($)).toMatch(/pose=asleep .*scene=2/)
+  const later = await view($)
+  expect(later.pose).toMatch(/Pose\s+asleep/)
+  expect(later.isStudio).toBe(false)
 })
 
 test('a subagent finishing changes nothing', async ($, on) => {
@@ -48,7 +61,9 @@ test('a subagent finishing changes nothing', async ($, on) => {
   await startTurn($)
   await completeTurn($, 't2', 'a1')
   await clock.advance(1500)
-  expect(await line($)).toMatch(/pose=thinking frames=0 scene=1/)
+  const v = await view($)
+  expect(v.pose).toMatch(/Pose\s+thinking/)
+  expect(v.isStudio).toBe(true)
 })
 
 test('parallel calls keep the newest pose until all have settled', async ($, on) => {
@@ -64,8 +79,10 @@ test('parallel calls keep the newest pose until all have settled', async ($, on)
   await waitFor(clock, () => pending.has('p2'))
   pending.get('p1')?.()
   await p1
-  expect(await line($)).toMatch(/pose=keyboard/)
+  const during = await view($)
+  expect(during.pose).toMatch(/Pose\s+keyboard/)
+  await during.ui.unmount()
   pending.get('p2')?.()
   await p2
-  expect(await line($)).toMatch(/pose=thinking/)
+  expect((await view($)).pose).toMatch(/Pose\s+thinking/)
 })

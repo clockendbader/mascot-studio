@@ -3,9 +3,15 @@ import type { Register } from 'claude-code'
 
 import type { Activity, Keyframe, Opener, Scene } from '../types'
 import { finishKeyframe, firstLine, poseForTool, startKeyframe, targetOf } from './activity'
+import { rasterFrames } from './animator'
+import type { AnimModel, RasterKey } from './animator'
+import { formatElapsed, hatFor } from './calendar'
+import { layoutFor } from './layout'
+import { studioView } from './views/studio'
 
 const PANE = 'mascot-studio'
 const HOP_MS = 1500
+const TICK_MS = 166
 
 const opener = atom({ plugin: 'mascot-studio', key: 'opener' } as const, null as Opener)
 const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { pose: 'asleep', since: 0 } as Activity)
@@ -18,6 +24,11 @@ const turns = atom({ plugin: 'mascot-studio', key: 'turns' } as const, 0)
 
 /** The cwd's last path segment, for the pane title. */
 let folder = 'untitled'
+/** Animation tick and the clock as of the last tick; both start over on a reload. */
+let tick = 0
+let now = 0
+/** What the pane last drew: the ticker repaints these rasters until a repaint is refused. */
+let drawn: { model: AnimModel; mounted: Set<RasterKey> } | null = null
 
 function folderOf(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(part => part !== '')
@@ -36,6 +47,20 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     folder = folderOf(e.cwd)
     await $.command.register({ name: 'studio', description: 'Open or close Mascot Studio' })
+    const animate = async () => {
+      tick += 1
+      now = await $.clock.now()
+      const last = drawn
+      if (last === null || last.mounted.size === 0) return
+      for (const frame of rasterFrames(last.model, tick, now)) {
+        if (!last.mounted.has(frame.key)) continue
+        const painted = await $.ui.blit({ requestId: PANE, key: frame.key, cells: frame.cells })
+        if (painted.deny !== undefined) last.mounted.delete(frame.key)
+      }
+    }
+    $.clock.every(TICK_MS, () => {
+      void animate().catch(() => undefined)
+    })
     return next(e)
   })
 
@@ -80,7 +105,7 @@ export const register: Register = on => {
       )
       const isTurnRunning = (await read($, turnStartedAt)) !== null
       const isAllDone = (await read($, keyframes)).every(frame => frame.durationMs !== undefined)
-      if (isTurnRunning && isAllDone) await update($, activity, () => ({ pose: 'thinking', since: ended }) as Activity)
+      if (isTurnRunning && isAllDone) await update($, activity, last => ({ ...last, pose: 'thinking', since: ended }) as Activity)
     } catch {
       // observing only
     }
@@ -124,13 +149,46 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Text } = $.ui.resolve(e)
-    const now = await read($, activity)
+    if (e.surface !== 'terminal') {
+      const { Text } = $.ui.resolve(e)
+      return <Text>Mascot Studio runs in the terminal for now.</Text>
+    }
+    const els = $.ui.resolve(e)
+    const cols = e.props.bodyColumns
+    const rows = e.props.scroll.bodyRows
+    const at = await $.clock.now()
+    const act = await read($, activity)
     const frames = await read($, keyframes)
+    const selected = await read($, selectedFrame)
     const sc = await read($, scene)
-    await read($, selectedFrame)
-    await read($, turns)
-    const err = [...frames].reverse().find(frame => frame.isError)?.errorLine ?? ''
-    return <Text>{`pose=${now.pose} frames=${frames.length} scene=${sc} err=${err}`}</Text>
+    const startedAt = await read($, turnStartedAt)
+    const layout = layoutFor(cols, rows, sc, false)
+
+    const model: AnimModel =
+      layout.tooNarrow || sc !== 1 ? {} : { stage: { cols, pose: act.pose, hat: hatFor(new Date(at)), screensaver: null } }
+    const rasters = rasterFrames(model, tick, at)
+    drawn = { model, mounted: new Set(rasters.map(frame => frame.key)) }
+
+    return studioView(
+      els,
+      {
+        cols,
+        layout,
+        scene: sc,
+        keyframes: frames,
+        soundFrames: [],
+        current: frames.at(-1)?.n ?? 0,
+        selected: selected === null ? null : (frames.find(frame => frame.n === selected) ?? null),
+        activity: act,
+        elapsed: startedAt === null ? '' : formatElapsed(at - startedAt),
+        visitors: null,
+        frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
+      },
+      {
+        selectFrame: n => void update($, selectedFrame, () => n),
+        live: () => void update($, selectedFrame, () => null),
+        toggleScene: () => void update($, scene, s => (s === 1 ? 2 : 1) as Scene),
+      },
+    )
   })
 }
