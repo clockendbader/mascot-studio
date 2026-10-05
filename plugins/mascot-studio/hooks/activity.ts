@@ -1,3 +1,4 @@
+import { plainText } from './text'
 import type { Keyframe, Pose } from '../types'
 
 export const MAX_KEYFRAMES = 200
@@ -35,8 +36,9 @@ export function poseForTool(tool: string): Pose {
   return 'coding'
 }
 
+/** The first line of some outside text, plain. */
 export function firstLine(text: string): string {
-  return text.split(/\r?\n/, 1)[0] ?? ''
+  return plainText(text.split(/\r?\n/, 1)[0] ?? '')
 }
 
 const TARGET_FIELDS = ['file_path', 'path', 'notebook_path', 'pattern', 'url', 'query', 'command', 'description'] as const

@@ -68,7 +68,7 @@ def raster_svg(cols: int, rows: int, cells: str) -> str:
         top, bottom = hex_color(fg), hex_color(bg)
         if cp == 0x2580:
             if top:
-                out.append(f'<rect x="{x}" y="{y}" width="{CW}" height="{CH // 2}" fill="{top}"/>')
+                out.append(f'<rect x="{x}" y="{y}" width="{CW}" height="{CH // 2}" fill="{top}"/>')  # colours are #RRGGBB built here
             if bottom:
                 out.append(f'<rect x="{x}" y="{y + CH // 2}" width="{CW}" height="{CH // 2}" fill="{bottom}"/>')
             continue
@@ -140,7 +140,7 @@ def node_html(node, rasters) -> str:
         if props.get('bold'):
             style.append('font-weight:700')
         wrap = props.get('wrap') == 'wrap'
-        return f'<span class="t{" wrap" if wrap else ""}" style="{";".join(style)}">{cells(text_of(kids), wrap)}</span>'
+        return f'<span class="t{" wrap" if wrap else ""}" style="{esc(";".join(style))}">{cells(text_of(kids), wrap)}</span>'
     # Box, ClientBox (a Client's own drawing, sized as the Client), anything else as a box
     style = ['flex-direction:' + ('column' if props.get('flexDirection') == 'column' else 'row')]
     for prop, unit, css in (('width', CW, 'width'), ('height', CH, 'height'), ('minWidth', CW, 'min-width'), ('minHeight', CH, 'min-height')):
@@ -170,8 +170,9 @@ def node_html(node, rasters) -> str:
     if props.get('borderStyle'):
         style.append(f'padding:{CH}px {CW}px')
         radius = '7px' if props['borderStyle'] == 'round' else '1px'
-        border = f'<div class="bd" style="border-color:{props.get("borderColor", TERM_FG)};border-radius:{radius}"></div>'
-    return f'<div class="box" style="{";".join(style)}">{border}{inner}</div>'
+        border_style = f'border-color:{props.get("borderColor", TERM_FG)};border-radius:{radius}'
+        border = f'<div class="bd" style="{esc(border_style)}"></div>'
+    return f'<div class="box" style="{esc(";".join(style))}">{border}{inner}</div>'
 
 
 def frame_html(frame, index: int, total: int, caption: bool, cols: int, rows: int) -> str:

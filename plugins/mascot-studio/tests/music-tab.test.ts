@@ -23,9 +23,9 @@ describe('players report position and duration', () => {
     expect(s).toMatchObject({ kind: 'playing', progress: { position: 72.4, duration: 185 } })
   })
 
-  test('Linux, in microseconds, a tab in the title kept', () => {
+  test('Linux, in microseconds, a title with a tab kept whole (the tab drawn as a space)', () => {
     const s = parsePlayerctlLine('Playing\tspotify\tA\tPart one\tPart two\t72400000\t185000000')
-    expect(s).toMatchObject({ kind: 'playing', track: { title: 'Part one\tPart two' }, progress: { position: 72.4, duration: 185 } })
+    expect(s).toMatchObject({ kind: 'playing', track: { title: 'Part one Part two' }, progress: { position: 72.4, duration: 185 } })
   })
 
   test('macOS, Spotify in milliseconds and a comma decimal', () => {

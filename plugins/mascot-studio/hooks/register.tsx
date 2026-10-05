@@ -26,6 +26,7 @@ import type { Piece, SoundBackend, SoundHost } from './sound/types'
 import { windowsBackend } from './sound/windows'
 import { dialogView, dialogWidth, okSegments } from './views/dialogs'
 import { studioView } from './views/studio'
+import { lookup, plainText } from './text'
 import { timelineControls, timelineTabView } from './views/timelineTab'
 
 const PANE = 'mascot-studio'
@@ -188,7 +189,7 @@ function isRawUsage(value: unknown): value is RawUsage {
 
 function folderOf(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(part => part !== '')
-  return parts.at(-1) ?? 'untitled'
+  return plainText(parts.at(-1) ?? '') || 'untitled'
 }
 
 /** What a tool call's result says about failure: an error result or a refusal. */
@@ -273,7 +274,7 @@ export const register: Register = (on, options) => {
     if (!(await $.session.surfaces()).includes('terminal')) return { text: TERMINAL_ONLY }
     const [verb = '', arg = ''] = String((e as { args?: unknown }).args ?? '').trim().toLowerCase().split(/\s+/)
     const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
-    const shown = TAB_NAMES[verb]
+    const shown = lookup(TAB_NAMES, verb)
     if (shown !== undefined) {
       await update($, tab, () => shown)
       if (!isOpen) {
@@ -283,7 +284,7 @@ export const register: Register = (on, options) => {
       return { text: `Showing ${shown[0]?.toUpperCase()}${shown.slice(1)}.` }
     }
     if (verb === 'theme') {
-      const chosen = (THEMES as Readonly<Record<string, (typeof THEMES)[ThemeName] | undefined>>)[arg]
+      const chosen = lookup<(typeof THEMES)[ThemeName]>(THEMES, arg)
       if (chosen === undefined) return { text: 'Themes: windows7, macos, ubuntu (or set Theme in /config).' }
       await update($, themeOverride, () => chosen.name)
       return { text: `Theme set to ${chosen.label} (this session).` }
@@ -298,7 +299,7 @@ export const register: Register = (on, options) => {
       const pinned = await step($, verb)
       return { text: pinned === null ? 'Back to live.' : `Showing step ${pinned}.` }
     }
-    const control = MUSIC_CONTROLS[verb]
+    const control = lookup(MUSIC_CONTROLS, verb)
     if (control !== undefined) return { text: (await runMusic($, control, hasSound)).text }
     if (verb !== '') {
       return {
@@ -319,7 +320,7 @@ export const register: Register = (on, options) => {
     let started = 0
     try {
       started = await $.clock.now()
-      const tool = String(e.tool)
+      const tool = plainText(String(e.tool))
       const target = targetOf(e as unknown as Record<string, unknown>)
       const pose = poseForTool(tool)
       await update($, keyframes, list => {
@@ -445,14 +446,14 @@ export const register: Register = (on, options) => {
       if (click === 'prev' || click === 'next' || click === 'live') await step($, click)
       if (click === 'details') await update($, usageDetails, shown => !shown)
       if (click === 'ok') await setDialog($, null)
-      const control = click === null ? undefined : MUSIC_CONTROLS[click]
+      const control = click === null ? undefined : lookup(MUSIC_CONTROLS, click)
       if (control !== undefined) {
         const done = await runMusic($, control, hasSound)
         if (!done.ok) $.ui.toast(done.text.replace(/\.$/, ''))
       }
       if (click !== null) {
-        if (click.startsWith('tab:') && TAB_NAMES[click.slice(4)] !== undefined) {
-          const chosen = TAB_NAMES[click.slice(4)] as Tab
+        const chosen = click.startsWith('tab:') ? lookup(TAB_NAMES, click.slice(4)) : undefined
+        if (chosen !== undefined) {
           await update($, tab, () => chosen)
         } else if (click === 'close') {
           await $.ui.close({ id: PANE })

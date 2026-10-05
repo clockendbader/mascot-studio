@@ -3,6 +3,7 @@
 // against an app that is not installed.
 
 import type { Progress, SoundAction, SoundStatus, Track } from '../../types'
+import { trackText } from '../text'
 import { numberIn, progressOf } from './progress'
 import type { SoundBackend, SoundHost } from './types'
 
@@ -48,7 +49,7 @@ export function parseAppleScript(app: string, out: string): Reading | null {
   const title = (hasTimes ? fields.slice(2, -2) : fields.slice(2)).join('\t')
   const lengthScale = app === 'Spotify' ? 1000 : 1
   const progress = hasTimes ? progressOf(numberIn(fields.at(-2)), numberIn(fields.at(-1)) / lengthScale) : undefined
-  return { app, title, artist, state, ...(progress === undefined ? {} : { progress }) }
+  return { app, title: trackText(title), artist: trackText(artist), state, ...(progress === undefined ? {} : { progress }) }
 }
 
 /** A playing app wins; otherwise the paused app shown last; otherwise any paused app. */

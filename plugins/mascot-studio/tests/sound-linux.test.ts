@@ -19,8 +19,8 @@ describe('parsePlayerctlLine', () => {
     expect(parsePlayerctlLine('')).toEqual({ kind: 'nothing' })
   })
 
-  test('keeps a tab inside a title', () => {
-    expect(parsePlayerctlLine('Playing\tmpv\ta\tpart one\tpart two')).toMatchObject({ track: { title: 'part one\tpart two' } })
+  test('keeps a title with a tab whole, the tab drawn as a space', () => {
+    expect(parsePlayerctlLine('Playing\tmpv\ta\tpart one\tpart two')).toMatchObject({ track: { title: 'part one part two' } })
   })
 
   test('ignores a line that is not a status', () => {

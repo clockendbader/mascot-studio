@@ -112,7 +112,7 @@ Deviation from spec §10: there is no `hooks/state.ts`. The atoms live in `regis
 
 - [ ] **Step 1: Git identity.** Run `gh auth status`. If it isn't logged in, stop and ask the person to run `! gh auth login`. Then:
   ```bash
-  cd /c/Users/Admin/Projects/mascot-studio
+  cd mascot-studio   # the repo root
   LOGIN=$(gh api user --jq .login); ID=$(gh api user --jq .id)
   git config user.name "$LOGIN"; git config user.email "$ID+$LOGIN@users.noreply.github.com"
   ```

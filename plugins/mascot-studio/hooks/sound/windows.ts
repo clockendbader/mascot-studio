@@ -2,6 +2,7 @@
 // helper through WinRT; play/pause/next/previous are one-shot runs.
 
 import type { SoundAction, SoundStatus } from '../../types'
+import { lookup, plainText, trackText } from '../text'
 import { progressOf } from './progress'
 import { watchLines } from './supervisor'
 import type { SoundBackend } from './types'
@@ -82,13 +83,13 @@ export function appName(id: string): string {
   let name = id.split(/[\\/]/).pop() ?? id
   if (name.includes('!')) name = name.split('!').pop() ?? name
   name = name.replace(/\.exe$/i, '')
-  const known = KNOWN_APPS[name.toLowerCase()]
+  const known = lookup(KNOWN_APPS, name.toLowerCase())
   if (known !== undefined) return known
-  const last = name.split('.').pop() ?? name
-  return KNOWN_APPS[last.toLowerCase()] ?? (last.charAt(0).toUpperCase() + last.slice(1))
+  const last = plainText(name.split('.').pop() ?? name)
+  return lookup(KNOWN_APPS, last.toLowerCase()) ?? last.charAt(0).toUpperCase() + last.slice(1)
 }
 
-const text = (value: unknown) => (typeof value === 'string' ? value : '')
+const text = (value: unknown) => (typeof value === 'string' ? plainText(value) : '')
 const seconds = (value: unknown) => (typeof value === 'number' ? value : Number.NaN)
 
 export function parseSmtcLine(line: string): SoundStatus | null {
@@ -101,7 +102,7 @@ export function parseSmtcLine(line: string): SoundStatus | null {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null
   const fields = data as Record<string, unknown>
   if (fields.none === true) return { kind: 'nothing' }
-  const track = { app: appName(text(fields.app)), title: text(fields.title), artist: text(fields.artist) }
+  const track = { app: appName(text(fields.app)), title: trackText(text(fields.title)), artist: trackText(text(fields.artist)) }
   const progress = progressOf(seconds(fields.position), seconds(fields.duration))
   const extra = progress === undefined ? {} : { progress }
   if (fields.status === 'Playing') return { kind: 'playing', track, ...extra }

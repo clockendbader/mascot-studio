@@ -7,14 +7,31 @@ const STOP_AFTER = 5
 const STOP_WINDOW_MS = 120_000
 const HEALTHY_RUN_MS = 60_000
 
+/** A helper line longer than this is dropped whole rather than held. */
+const MAX_LINE = 64 * 1024
+
 /** Splits streamed text into whole lines, holding a partial last line for the next piece. */
 export class LineBuffer {
   private rest = ''
+  /** Set while the rest of an over-long line is still arriving. */
+  private isSkipping = false
 
   push(text: string): string[] {
     const lines = (this.rest + text).split('\n')
     this.rest = lines.pop() ?? ''
-    return lines.map(line => line.replace(/\r$/, ''))
+    const whole: string[] = []
+    for (const line of lines) {
+      if (this.isSkipping) {
+        this.isSkipping = false
+        continue
+      }
+      whole.push(line.replace(/\r$/, ''))
+    }
+    if (this.rest.length > MAX_LINE) {
+      this.rest = ''
+      this.isSkipping = true
+    }
+    return whole
   }
 }
 

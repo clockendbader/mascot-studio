@@ -457,7 +457,7 @@ All sprites are original.
 
 **Publishing.** Pushing to GitHub happens only after the person confirms, and needs `gh auth login` first.
 
-**Development.** The repo lives at `C:\Users\Admin\Projects\mascot-studio`. For live testing in a Claude Code session, the plugin folder is loaded either through the session's hot-reloading mods folder or with `claude --plugin-dir plugins/mascot-studio`; the implementation plan picks the mechanism after checking which works here.
+**Development.** The repo is developed on Windows. For live testing in a Claude Code session, the plugin folder is loaded either through the session's hot-reloading mods folder or with `claude --plugin-dir plugins/mascot-studio`; the implementation plan picks the mechanism after checking which works here.
 
 ## 14. Milestones and later list
 

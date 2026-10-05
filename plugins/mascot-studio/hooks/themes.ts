@@ -4,6 +4,7 @@
 
 import type { ThemeName } from '../types'
 import type { Os } from './sound/platform'
+import { lookup } from './text'
 
 export type Theme = {
   name: ThemeName
@@ -99,6 +100,5 @@ const AUTO: Readonly<Record<Os, ThemeName>> = { windows: 'windows7', macos: 'mac
 
 /** The theme for a setting (`auto` or a theme name) on an OS; anything unknown behaves as `auto`. */
 export function themeFor(setting: string, os: Os): Theme {
-  const named = (THEMES as Readonly<Record<string, Theme | undefined>>)[setting]
-  return named ?? THEMES[AUTO[os]]
+  return lookup<Theme>(THEMES, setting) ?? THEMES[AUTO[os]]
 }

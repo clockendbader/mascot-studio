@@ -1,4 +1,5 @@
 import type { Dialog } from '../types'
+import { plainText } from './text'
 
 export const WAITING = 'Clawd is waiting on you'
 export const QUESTION_TEXT = 'MascotProgramming: hey! i have a question for you'
@@ -6,12 +7,15 @@ const ASKING = 'MascotProgramming: hey! i need ur OK'
 
 /** The instant message for a permission prompt on a tool and its target. */
 export function needsYouText(tool: string, target: string): string {
-  return target === '' ? `${ASKING} to run ${tool}` : `${ASKING} to run ${tool}: ${target}`
+  const name = plainText(tool)
+  const what = plainText(target)
+  return what === '' ? `${ASKING} to run ${name}` : `${ASKING} to run ${name}: ${what}`
 }
 
 /** The instant message for a permission notification, which names no tool. */
 export function notifiedText(message: string): string {
-  return message === '' ? ASKING : `${ASKING} — ${message}`
+  const words = plainText(message)
+  return words === '' ? ASKING : `${ASKING} — ${words}`
 }
 
 /** The plugin's one status line: waiting on the person, else the usage warning, else nothing. */

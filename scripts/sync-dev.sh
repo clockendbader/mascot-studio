@@ -2,8 +2,8 @@
 # Copy the plugin into a Claude Code session's hot-reload mods folder.
 # Usage: scripts/sync-dev.sh <mods-folder>
 set -euo pipefail
-if [ $# -ne 1 ]; then
-  echo "usage: scripts/sync-dev.sh <mods-folder>" >&2
+if [ $# -ne 1 ] || [ -z "$1" ] || [ ! -d "$1" ]; then
+  echo "usage: scripts/sync-dev.sh <mods-folder>   (an existing folder)" >&2
   exit 2
 fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
