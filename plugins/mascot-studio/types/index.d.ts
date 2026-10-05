@@ -13,13 +13,13 @@ export type Keyframe = {
   isError?: boolean
   errorLine?: string
 }
-export type MiniMood = 'relaxed' | 'squint' | 'sweat' | 'flat' | 'asleep'
 export type Activity = { pose: Pose; tool?: string; target?: string; since: number }
 export type Tab = 'timeline' | 'usage' | 'music'
 export type RateLimitView = { kind: string; percentUsed: number; resetsAt?: string }
 export type UsageSnapshot = {
   contextPercent?: number
   contextTokens?: number
+  contextWindow?: number
   rateLimits: RateLimitView[]
   costUsd?: number
   toolCalls: number
@@ -46,6 +46,7 @@ declare module 'claude-code' {
       selectedFrame: number | null
       tab: Tab
       themeOverride: ThemeName | null
+      usageDetails: boolean
       turnStartedAt: number | null
       idleSince: number | null
       turns: number

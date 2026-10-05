@@ -1,10 +1,7 @@
 import { test, expect, describe } from 'claude-code/testing'
 import {
   costLabel,
-  highestPercent,
   level,
-  limitsView,
-  miniMood,
   pushHistory,
   snapshotFrom,
   usageWarning,
@@ -45,21 +42,6 @@ test('costLabel says Est. on a plan and plain Cost on an API key', () => {
   expect(costLabel(snap())).toBe('Cost')
 })
 
-describe('limitsView', () => {
-  test('marks an API key when there are no plan limits', () => {
-    expect(limitsView(snap(), now)).toEqual({ reset: '', isApiKey: true })
-  })
-
-  test('takes both windows and the soonest reset', () => {
-    const s = snap({
-      rateLimits: [
-        { kind: 'seven_day', percentUsed: 18, resetsAt: at(12, 9) },
-        { kind: 'five_hour', percentUsed: 31, resetsAt: at(5, 16, 10) },
-      ],
-    })
-    expect(limitsView(s, now)).toEqual({ fiveHour: 31, weekly: 18, reset: '4:10 PM', isApiKey: false })
-  })
-})
 
 describe('usageWarning', () => {
   test('warns about context', () => {
@@ -86,21 +68,7 @@ describe('usageWarning', () => {
   })
 })
 
-test('highestPercent looks at context and every limit', () => {
-  expect(highestPercent(snap({ contextPercent: 40, rateLimits: [{ kind: 'seven_day', percentUsed: 70 }] }))).toBe(70)
-  expect(highestPercent(snap())).toBeUndefined()
-})
 
-test('miniMood follows the highest figure and sleeps after a quiet minute', () => {
-  expect(miniMood(30, 0)).toBe('relaxed')
-  expect(miniMood(undefined, 0)).toBe('relaxed')
-  expect(miniMood(60, 0)).toBe('squint')
-  expect(miniMood(80, 0)).toBe('squint')
-  expect(miniMood(85, 0)).toBe('sweat')
-  expect(miniMood(100, 0)).toBe('flat')
-  expect(miniMood(100, 60000)).toBe('asleep')
-  expect(miniMood(30, 59999)).toBe('relaxed')
-})
 
 test('pushHistory keeps the newest samples and skips missing ones', () => {
   expect(pushHistory([1, 2, 3], 4, 3)).toEqual([2, 3, 4])

@@ -10,8 +10,6 @@ import { chromeCells } from './chrome'
 import { dialogView } from './dialogs'
 import { mascotAmpView } from './mascotAmp'
 import type { AmpActions, AmpVM } from './mascotAmp'
-import { taskManagerView } from './taskManager'
-import type { TaskManagerVM } from './taskManager'
 
 type Els = Elements['terminal']
 
@@ -29,14 +27,13 @@ export type StudioVM = {
   elapsed: string
   visitors: number | null
   frames: Readonly<Partial<Record<string, RasterFrame>>>
-  tm?: TaskManagerVM
   amp?: AmpVM
   dialog: Dialog
   screensaver: boolean
 }
 
 /** The clickable rows, built by the hooks module (Client rows, or plain Text after a fault). */
-export type StudioParts = { title: Tree; tabs: Tree; status: Tree; timeline: Tree | null }
+export type StudioParts = { title: Tree; tabs: Tree; status: Tree; timeline: Tree | null; usage: Tree | null }
 
 export type StudioActions = AmpActions & {
   dismissDialog(): void
@@ -50,7 +47,7 @@ function rasterOf(els: Els, frame: RasterFrame | undefined) {
 
 function tabContent(els: Els, vm: StudioVM, act: StudioActions, parts: StudioParts) {
   const { Box, Text } = els
-  if (vm.tab === 'usage') return vm.tm === undefined ? null : taskManagerView(els, vm.tm, vm.frames)
+  if (vm.tab === 'usage') return parts.usage
   if (vm.tab === 'music') {
     if (vm.amp === undefined) return <Text color={vm.theme.ink}>Music is off. Turn it on in /config.</Text>
     return mascotAmpView(els, vm.amp, vm.frames, act)

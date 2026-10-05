@@ -13,9 +13,9 @@ import { layoutV2 } from './layout'
 import { THEMES, themeFor } from './themes'
 import { segmentsText, statusSegments, tabSegments, titleSegments } from './views/chrome'
 import type { RowSegment } from './client/row'
-import { costLabel, highestPercent, limitsView, pushHistory, snapshotFrom, usageWarning } from './usage'
+import { pushHistory, snapshotFrom, usageWarning } from './usage'
 import type { RawUsage } from './usage'
-import { taskManagerSizes } from './views/taskManager'
+import { usageControls, usageTabView } from './views/usageTab'
 import { marqueeOf } from './views/mascotAmp'
 import { linuxBackend } from './sound/linux'
 import { macosBackend } from './sound/macos'
@@ -35,6 +35,7 @@ const activity = atom({ plugin: 'mascot-studio', key: 'activity' } as const, { p
 const keyframes = atom({ plugin: 'mascot-studio', key: 'keyframes' } as const, [] as Keyframe[])
 const selectedFrame = atom({ plugin: 'mascot-studio', key: 'selectedFrame' } as const, null as number | null)
 const tab = atom({ plugin: 'mascot-studio', key: 'tab' } as const, 'timeline' as Tab)
+const usageDetails = atom({ plugin: 'mascot-studio', key: 'usageDetails' } as const, false)
 const themeOverride = atom({ plugin: 'mascot-studio', key: 'themeOverride' } as const, null as ThemeName | null)
 const turnStartedAt = atom({ plugin: 'mascot-studio', key: 'turnStartedAt' } as const, null as number | null)
 const idleSince = atom({ plugin: 'mascot-studio', key: 'idleSince' } as const, null as number | null)
@@ -260,6 +261,12 @@ export const register: Register = (on, options) => {
       await update($, themeOverride, () => chosen.name)
       return { text: `Theme set to ${chosen.label} (this session).` }
     }
+    if (verb === 'details') {
+      const shown = !(await read($, usageDetails))
+      await update($, usageDetails, () => shown)
+      await update($, tab, () => 'usage' as Tab)
+      return { text: shown ? 'Showing usage details.' : 'Showing the usage graph.' }
+    }
     if (verb === 'prev' || verb === 'next' || verb === 'live') {
       const pinned = await step($, verb)
       return { text: pinned === null ? 'Back to live.' : `Showing step ${pinned}.` }
@@ -405,6 +412,7 @@ export const register: Register = (on, options) => {
       const click = message !== null && 'click' in message ? message.click : null
       if (message !== null && 'pick' in message) await step($, { pick: message.pick })
       if (click === 'prev' || click === 'next' || click === 'live') await step($, click)
+      if (click === 'details') await update($, usageDetails, shown => !shown)
       if (click !== null) {
         if (click.startsWith('tab:') && TAB_NAMES[click.slice(4)] !== undefined) {
           const chosen = TAB_NAMES[click.slice(4)] as Tab
@@ -497,15 +505,10 @@ export const register: Register = (on, options) => {
         heights: vizHeights,
       }
     }
-    if (!layout.tooNarrow && shownTab === 'usage') {
-      model.tm = {
-        ...taskManagerSizes(cols),
-        samples: history,
-        ...(figures.contextPercent !== undefined ? { pct: figures.contextPercent } : {}),
-        ...(highestPercent(figures) !== undefined ? { highest: highestPercent(figures) } : {}),
-        idleSince: quietSince,
-        title: 'Task Manager',
-      }
+    const details = await read($, usageDetails)
+    if (!layout.tooNarrow && shownTab === 'usage' && !details) {
+      const hexOf = (color: string) => parseInt(color.slice(1), 16)
+      model.usage = { graphCols: cols - 4, samples: history, colors: { bg: hexOf(theme.graph.bg), grid: hexOf(theme.graph.grid), line: hexOf(theme.graph.line) } }
     }
     const rasters = rasterFrames(model, tick, at)
     drawn = { model, mounted: new Set(rasters.map(frame => frame.key)) }
@@ -539,8 +542,19 @@ export const register: Register = (on, options) => {
             row('tl-controls', timelineControls(theme, cols, pinned !== null)),
           )
         : null
+    const graphFrame = rasters.find(frame => frame.key === 'ctx-graph')
+    const usageTree =
+      shownTab === 'usage' && !layout.tooNarrow
+        ? usageTabView(
+            els,
+            { cols, theme, usage: figures, turns: turnCount, toolCalls: current, details, now: new Date(at) },
+            graphFrame === undefined ? null : <els.Raster key="ctx-graph" columns={graphFrame.columns} rows={graphFrame.rows} cells={graphFrame.cells} />,
+            row('usage-controls', usageControls(theme, cols, details)),
+          )
+        : null
     const parts = {
       timeline,
+      usage: usageTree,
       title: row('title', titleSegments(theme, cols)),
       tabs: row('tabs', tabSegments(theme, cols, shownTab)),
       status: row('status', statusSegments(theme, cols, {
@@ -567,20 +581,6 @@ export const register: Register = (on, options) => {
         visitors: visitorCount,
         frames: Object.fromEntries(rasters.map(frame => [frame.key, frame])),
         ...(hasSound ? { amp: { cols, mode: 'full' as const, status: soundStatus } } : {}),
-        ...(shownTab === 'usage'
-          ? {
-              tm: {
-                cols,
-                boxes: true,
-                ...(figures.contextPercent !== undefined ? { pct: figures.contextPercent } : {}),
-                limits: limitsView(figures, new Date(at)),
-                costLabel: costLabel(figures),
-                ...(figures.costUsd !== undefined ? { costUsd: figures.costUsd } : {}),
-                turns: turnCount,
-                toolCalls: current,
-              },
-            }
-          : {}),
       },
       {
         dismissDialog: () => void setDialog($, null),
