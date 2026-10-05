@@ -108,7 +108,7 @@ type MusicControl = 'back' | 'play' | 'skip' | 'retry'
 const MUSIC_CONTROLS: Readonly<Record<string, MusicControl>> = { back: 'back', play: 'play', skip: 'skip', retry: 'retry' }
 const SOUND_ACTIONS: Readonly<Record<Exclude<MusicControl, 'retry'>, SoundAction>> = { back: 'previous', play: 'play-pause', skip: 'next' }
 const SOUND_DONE: Readonly<Record<Exclude<MusicControl, 'retry'>, string>> = { back: 'previous track', play: 'play/pause', skip: 'next track' }
-const MUSIC_OFF = 'Music is off. Turn it on in /config.'
+const MUSIC_OFF = 'Music is off. Turn it on with /plugin configure.'
 
 /** Runs a music button: the player's transport, or a fresh watch for retry. `ok` is false when the player could not be reached. */
 async function runMusic($: EngineInterface, control: MusicControl, hasSound: boolean): Promise<{ ok: boolean; text: string }> {
@@ -285,7 +285,7 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'theme') {
       const chosen = lookup<(typeof THEMES)[ThemeName]>(THEMES, arg)
-      if (chosen === undefined) return { text: 'Themes: windows7, macos, ubuntu (or set Theme in /config).' }
+      if (chosen === undefined) return { text: 'Themes: windows7, macos, ubuntu. To keep one, set Theme with /plugin configure.' }
       await update($, themeOverride, () => chosen.name)
       return { text: `Theme set to ${chosen.label} (this session).` }
     }

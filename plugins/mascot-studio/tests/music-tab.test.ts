@@ -190,8 +190,9 @@ test('with sound off the tab says how to turn it on and nothing runs', { options
   await startSession($)
   await $.command.run({ command: 'studio', args: 'music' } as never)
   const ui = await mountPane($, 46, 24)
-  expect(await ui.find({ type: 'Text', text: /Music is off\. Turn it on in \/config\./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Music is off\. Turn it on with \/plugin configure\./ })).toBeDefined()
   expect(rec.spawns).toEqual([])
+  expect(await $.command.run({ command: 'studio', args: 'play' } as never)).toMatchObject({ text: 'Music is off. Turn it on with /plugin configure.' })
 })
 
 test('every Music tab text sets its colour', async ($, on) => {

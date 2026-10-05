@@ -64,12 +64,12 @@ export function musicControls(theme: Theme, width: number, status: SoundStatus):
   )
 }
 
-/** The tab when music is turned off in /config. */
+/** The tab when music is turned off in the plugin's options. */
 export function musicOffView(els: Els, theme: Theme): Tree {
   const { Box, Text } = els
   return (
     <Box backgroundColor={theme.body}>
-      <Text color={theme.ink}>{' Music is off. Turn it on in /config.'}</Text>
+      <Text color={theme.ink}>{' Music is off. Turn it on with /plugin configure.'}</Text>
     </Box>
   )
 }

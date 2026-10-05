@@ -75,7 +75,9 @@ describe('names from outside never reach the prototype', () => {
     for (const word of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
       expect(await $.command.run({ command: 'studio', args: word } as never)).toMatchObject({ text: expect.stringContaining('Try /studio') })
     }
-    expect(await $.command.run({ command: 'studio', args: 'theme constructor' } as never)).toMatchObject({ text: expect.stringContaining('Themes:') })
+    expect(await $.command.run({ command: 'studio', args: 'theme constructor' } as never)).toMatchObject({
+      text: 'Themes: windows7, macos, ubuntu. To keep one, set Theme with /plugin configure.',
+    })
   })
 })
 
